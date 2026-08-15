@@ -1,0 +1,12 @@
+{
+  "name": "小球貓電鐵",
+  "short_name": "小球貓電鐵",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0C1A28",
+  "theme_color": "#0C1A28",
+  "icons": [
+    {"src": "assets/app-icon/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "assets/app-icon/icon-512.png", "sizes": "512x512", "type": "image/png"}
+  ]
+}
