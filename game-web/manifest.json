@@ -1,7 +1,8 @@
 {
   "name": "小球貓電鐵",
   "short_name": "小球貓電鐵",
-  "start_url": ".",
+  "start_url": "/SBC_Dantei/",
+  "scope": "/SBC_Dantei/",
   "display": "standalone",
   "background_color": "#0C1A28",
   "theme_color": "#0C1A28",
