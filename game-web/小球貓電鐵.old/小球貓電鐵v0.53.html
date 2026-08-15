@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小球貓電鐵 v0.53 — Phase 1</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #0C1A28; --panel: #172B40cc; --rim: #254663;
+    --amber: #F0A020; --text: #D4E6F4; --lo: #5E84A4;
+    --ui: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  }
+  html, body { width:100%; height:100%; overflow:hidden; background:var(--navy); font-family:var(--ui); color:var(--text); }
+  #game { position:fixed; inset:0; width:100%; height:100%; display:block; cursor:grab; }
+
+  /* HUD 左上：月曆 + 玩家 */
+  #hud {
+    position:fixed; top:14px; left:14px; z-index:10;
+    background:var(--panel); border:1px solid var(--rim); border-radius:10px;
+    padding:12px 14px; backdrop-filter:blur(6px); min-width:200px;
+  }
+  #calendar { font-size:15px; font-weight:700; color:var(--amber); letter-spacing:.08em; margin-bottom:8px; }
+  .p-row { display:flex; align-items:center; gap:7px; padding:4px 6px; border-radius:6px; font-size:13px; }
+  .p-row.cur { background:rgba(240,160,32,.16); outline:1px solid rgba(240,160,32,.5); }
+  .p-row .dot { width:11px; height:11px; border-radius:50%; border:1.5px solid #fff; flex-shrink:0; }
+  .p-row .loc { color:var(--lo); font-size:11px; margin-left:auto; padding-left:10px; }
+
+  /* 控制列：下方中央 */
+  #controls {
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:10;
+    display:flex; align-items:center; gap:12px;
+  }
+  #btn-roll {
+    height:52px; padding:0 30px; font-size:18px; font-weight:700; font-family:var(--ui);
+    background:var(--amber); color:#20150a; border:none; border-radius:26px; cursor:pointer;
+    box-shadow:0 4px 16px rgba(0,0,0,.45); transition:transform .1s;
+  }
+  #btn-roll:hover:not(:disabled) { transform:scale(1.05); }
+  #btn-roll:disabled { opacity:.35; cursor:default; }
+  #btn-zoom {
+    height:44px; padding:0 16px; font-size:13px; font-family:var(--ui);
+    background:var(--panel); color:var(--text); border:1px solid var(--rim); border-radius:22px; cursor:pointer;
+  }
+
+  /* 骰子動畫 */
+  #dice {
+    position:fixed; top:38%; left:50%; transform:translate(-50%,-50%) scale(.4);
+    font-size:110px; z-index:20; opacity:0; pointer-events:none;
+    transition:all .35s cubic-bezier(.2,1.6,.4,1); color:#fff;
+    text-shadow:0 6px 24px rgba(0,0,0,.6);
+  }
+  #dice.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
+
+  /* 岔路箭頭 */
+  #branch-layer { position:fixed; inset:0; z-index:15; pointer-events:none; }
+  .branch-btn {
+    position:absolute; width:44px; height:44px; border-radius:50%; pointer-events:auto;
+    background:var(--amber); color:#20150a; border:2px solid #fff; cursor:pointer;
+    font-size:20px; display:flex; align-items:center; justify-content:center;
+    transform:rotate(var(--ang)); box-shadow:0 3px 12px rgba(0,0,0,.5);
+    animation:pulse 1s infinite alternate;
+  }
+  @keyframes pulse { from{box-shadow:0 0 0 0 rgba(240,160,32,.7);} to{box-shadow:0 0 0 12px rgba(240,160,32,0);} }
+  .branch-btn.green-btn {
+    background:#22C55E !important; color:#08290f; border-color:#fff;
+    animation:pulse-green 1s infinite alternate;
+  }
+  @keyframes pulse-green { from{box-shadow:0 0 0 0 rgba(34,197,94,.7);} to{box-shadow:0 0 0 12px rgba(34,197,94,0);} }
+
+  /* 提示 */
+  #toast {
+    position:fixed; bottom:92px; left:50%; transform:translateX(-50%) translateY(16px); z-index:20;
+    background:var(--panel); border:1px solid var(--rim); color:var(--text);
+    padding:10px 22px; border-radius:22px; font-size:14px; opacity:0; transition:all .25s;
+    backdrop-filter:blur(6px); white-space:nowrap;
+  }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* 小地圖 */
+  #minimap {
+    position:fixed; right:14px; bottom:14px; z-index:10;
+    border:1px solid var(--rim); border-radius:8px; background:rgba(17,38,59,.8);
+    backdrop-filter:blur(6px);
+  }
+
+  /* 靜音切換：固定在右上角，開場／選人數／遊戲中都看得到 */
+  #btn-mute {
+    position:fixed; top:14px; right:14px; z-index:70;
+    width:40px; height:40px; border-radius:50%; cursor:pointer;
+    background:var(--panel); border:1px solid var(--rim); color:var(--text);
+    font-size:17px; display:flex; align-items:center; justify-content:center;
+    backdrop-filter:blur(6px);
+  }
+  #btn-mute:hover { border-color:var(--amber); }
+
+  /* 開場：純畫面，無選單。按任意鍵／點滑鼠 1 秒後進入人數選擇畫面 */
+  #splash {
+    position:fixed; inset:0; z-index:55; overflow:hidden; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #splash-bg {
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    filter:brightness(.6); z-index:0;
+  }
+  #splash .splash-title {
+    position:absolute; z-index:1; top:36px; right:44px; text-align:right;
+    text-shadow:0 4px 20px rgba(0,0,0,.8), 0 0 4px rgba(0,0,0,.9);
+  }
+  #splash .splash-title h1 {
+    font-size:88px; color:var(--amber); letter-spacing:.1em; font-weight:900;
+  }
+  #splash .splash-title .subtitle {
+    color:#fff; font-size:20px; font-weight:600; margin-top:14px; letter-spacing:.06em;
+  }
+  #splash .splash-hint {
+    position:absolute; bottom:30px; left:50%; transform:translateX(-50%); z-index:1;
+    font-size:13px; color:rgba(255,255,255,.8); text-shadow:0 1px 4px rgba(0,0,0,.8);
+    animation:hintPulse 1.6s infinite alternate;
+  }
+  @keyframes hintPulse { from{opacity:.5;} to{opacity:1;} }
+  #splash-version {
+    position:absolute; left:16px; bottom:12px; z-index:1;
+    font-size:13px; color:rgba(255,255,255,.85); font-family:Menlo, monospace;
+    text-shadow:0 1px 4px rgba(0,0,0,.8);
+  }
+
+  /* 人數選擇畫面 */
+  #setup {
+    position:fixed; inset:0; z-index:50; overflow:hidden; display:none;
+    flex-direction:column; align-items:center; justify-content:center; gap:18px;
+    background:#0C1A28;
+  }
+  #setup-bg {
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    filter:brightness(.62); z-index:0;
+  }
+  #setup::after {
+    content:''; position:absolute; inset:0; z-index:0;
+    background:linear-gradient(180deg, rgba(12,26,40,.25) 0%, rgba(12,26,40,.35) 55%, rgba(12,26,40,.75) 100%);
+  }
+  #setup .row { position:relative; z-index:1; display:flex; gap:14px; }
+  #setup h2 { position:relative; z-index:1; color:var(--text); font-size:18px; letter-spacing:.06em; margin-bottom:4px; }
+  .n-btn {
+    width:96px; height:96px; font-size:17px; font-weight:700; font-family:var(--ui);
+    background:var(--panel); color:var(--text); border:2px solid var(--rim); border-radius:14px; cursor:pointer;
+    transition:all .15s;
+  }
+  .n-btn:hover { border-color:var(--amber); color:var(--amber); transform:translateY(-4px); }
+  #setup .hint { position:relative; z-index:1; font-size:12px; color:var(--lo); margin-top:14px; }
+
+  /* 月份跳字：每月回合開始前，從右側滑入 → 中間停頓 → 往左滑出 */
+  #month-banner {
+    position:fixed; inset:0; z-index:60; overflow:hidden; pointer-events:none;
+    opacity:0; visibility:hidden;
+  }
+  #month-banner.playing { opacity:1; visibility:visible; }
+  #month-banner-img {
+    position:absolute; inset:0; width:100%; height:100%;
+    background-size:cover; background-position:center; filter:brightness(.5);
+    opacity:0; transition:opacity .2s;
+  }
+  #month-banner.playing #month-banner-img { opacity:1; }
+  .month-banner-text {
+    position:absolute; top:50%; left:50%;
+    transform:translate(120%, -50%);
+    font-size:56px; font-weight:900; color:#fff; white-space:nowrap;
+    -webkit-text-stroke:2px #d6336c; text-shadow:0 4px 18px rgba(0,0,0,.6);
+  }
+  #month-banner.playing .month-banner-text {
+    animation:monthSlide 2.1s cubic-bezier(.22,.9,.32,1) forwards;
+  }
+  @keyframes monthSlide {
+    0%   { transform:translate(120%, -50%); opacity:0; }
+    22%  { transform:translate(-50%, -50%); opacity:1; }
+    62%  { transform:translate(-50%, -50%); opacity:1; }
+    100% { transform:translate(-220%, -50%); opacity:1; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="calendar">第 1 年　4 月</div>
+  <div id="roll-info" style="display:none;font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px;"></div>
+  <div id="destination" style="display:none;font-size:13px;font-weight:700;color:#FFD54A;margin-bottom:8px;"></div>
+  <div id="players"></div>
+</div>
+
+<div id="controls">
+  <button id="btn-roll" disabled>🎲 擲骰</button>
+  <button id="btn-zoom">🔍 全島 / 近景</button>
+</div>
+
+<div id="dice"></div>
+<div id="branch-layer"></div>
+<div id="toast"></div>
+<canvas id="minimap" width="190" height="218"></canvas>
+<button id="btn-mute" title="靜音切換">🔊</button>
+
+<div id="month-banner">
+  <div id="month-banner-img"></div>
+  <div class="month-banner-text"></div>
+</div>
+
+<div id="splash">
+  <img id="splash-bg" src="assets/screens/title.jpg" alt="">
+  <div class="splash-title">
+    <h1>小球貓電鐵</h1>
+    <p class="subtitle">台灣版的鐵道大富翁</p>
+  </div>
+  <div id="splash-version">V0.53</div>
+  <p class="splash-hint">按任意鍵或點擊畫面開始</p>
+</div>
+
+<div id="setup">
+  <img id="setup-bg" src="assets/screens/setup.jpg" alt="">
+  <h2>選擇對戰人數</h2>
+  <div class="row">
+    <button class="n-btn" data-n="2">2 人<br>對戰</button>
+    <button class="n-btn" data-n="3">3 人<br>對戰</button>
+    <button class="n-btn" data-n="4">4 人<br>對戰</button>
+  </div>
+  <p class="hint">同機輪流（hot-seat）・空白鍵擲骰・Z 或按鈕切換全島視角・滾輪縮放</p>
+</div>
+
+<script src="map_data.js?v=59"></script>
+<script src="src/data.js?v=59"></script>
+<script src="src/audio.js?v=59"></script>
+<script src="src/board.js?v=59"></script>
+<script src="src/render.js?v=59"></script>
+<script src="src/rules.js?v=59"></script>
+<script src="src/ui.js?v=59"></script>
+<script src="src/main.js?v=59"></script>
+</body>
+</html>

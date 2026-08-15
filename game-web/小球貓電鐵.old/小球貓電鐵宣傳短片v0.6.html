@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>小球貓電鐵｜宣傳短片 v0.6</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: #0b1d31; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
+    body { display: grid; place-items: center; padding: 22px; }
+    #trailer { position: relative; isolation: isolate; width: min(100%, 1280px); aspect-ratio: 16 / 9; overflow: hidden; border: 4px solid #f5c84c; border-radius: 22px; background: #123a5a; box-shadow: 0 24px 70px #000b; }
+    .scene { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity .75s ease; background: #123a5a; }
+    .scene.active { opacity: 1; pointer-events: auto; }
+    .scene iframe { display: block; width: 100%; height: 100%; border: 0; background: #123a5a; }
+    .title-scene, .closing-scene { display: grid; place-items: center; text-align: center; background: linear-gradient(#0f2f4da8, #09182bd9), url("assets/screens/title.jpg") center / cover; }
+    .title-copy, .closing-copy { padding: 4vw; color: white; text-shadow: 0 5px 0 #102a43, 0 8px 20px #000c; }
+    h1 { margin: 0; color: #ffd85e; font-size: clamp(34px, 6vw, 84px); letter-spacing: .07em; -webkit-text-stroke: 1px #613b03; }
+    h2 { margin: .35em 0 0; font-size: clamp(19px, 2.6vw, 36px); letter-spacing: .08em; }
+    .tag { display: inline-block; margin-bottom: 16px; padding: .45em 1em; border: 2px solid #fff3b4; border-radius: 999px; background: #173f60e8; color: #fff3b4; font-size: clamp(13px, 1.4vw, 19px); font-weight: 800; letter-spacing: .12em; }
+    .caption { position: absolute; z-index: 3; left: 5%; bottom: 9%; max-width: 74%; color: #fff; font-weight: 900; font-size: clamp(22px, 4vw, 52px); line-height: 1.2; text-shadow: 0 4px 0 #16354f, 0 7px 18px #000c; opacity: 0; transform: translateY(16px); transition: .4s ease .25s; pointer-events: none; }
+    .scene.active .caption { opacity: 1; transform: none; }
+    .caption small { display: block; margin-top: .45em; color: #ffdc65; font-size: .44em; letter-spacing: .08em; }
+    .vignette { position: absolute; inset: 0; z-index: 2; pointer-events: none; box-shadow: inset 0 -120px 100px -80px #000c, inset 0 0 80px #00112666; }
+    .top-label { position: absolute; z-index: 3; top: 4%; left: 50%; transform: translateX(-50%); padding: .45em .9em; border: 2px solid #fff6c5; border-radius: 99px; background: #163d5ce8; color: #fff; font-size: clamp(12px, 1.5vw, 18px); font-weight: 900; letter-spacing: .12em; white-space: nowrap; pointer-events: none; }
+    #controls { position: absolute; z-index: 6; right: 18px; bottom: 16px; display: flex; gap: 8px; }
+    #controls button { min-width: 42px; padding: 9px 13px; border: 2px solid #ffe69a; border-radius: 12px; background: #123650e8; color: white; font: 800 15px inherit; cursor: pointer; box-shadow: 0 3px 0 #071b2c; }
+    #controls button:hover { background: #235b80; }
+    #progress { position: absolute; z-index: 7; right: 0; bottom: 0; left: 0; height: 7px; background: #06182799; }
+    #progress > i { display: block; width: 0; height: 100%; background: linear-gradient(90deg, #ffca44, #ffef8a); transition: width .1s linear; }
+    .scene[data-name="dice"] iframe { transform: scale(1.02); }
+    .start-gate { position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; background: linear-gradient(#0b2134aa, #09182be8), url("assets/screens/title.jpg") center / cover; }
+    .start-gate[hidden] { display: none; }
+    .start-gate button { padding: .7em 1.4em; border: 3px solid #fff3b4; border-radius: 999px; background: linear-gradient(#ffdf68, #ec9b1e); box-shadow: 0 7px 0 #8b4e08, 0 16px 28px #0009; color: #1b3041; font: 900 clamp(21px, 3vw, 38px) inherit; cursor: pointer; }
+    .start-gate button:active { transform: translateY(5px); box-shadow: 0 2px 0 #8b4e08, 0 8px 16px #0009; }
+    .start-gate p { margin: 1.1em 0 0; color: white; font-size: clamp(13px, 1.6vw, 20px); font-weight: 800; text-align: center; text-shadow: 0 2px 5px #000; }
+    /* 宣傳版裁切模擬器的調校面板，保留實際動畫舞台。 */
+    .scene[data-name="shortcut"] iframe, .scene[data-name="arrival"] iframe { width: 150%; margin-left: -25%; }
+    .scene[data-name="settlement"] .caption { bottom: 7%; }
+
+    /* 結尾「有錢貓咪」：金幣雨 + 資產數字滾動，收在最有成就感的一刻。 */
+    .rich-scene { display: grid; place-items: center; overflow: hidden; background: radial-gradient(ellipse at 50% 38%, #ffd97a 0%, #f0a63c 42%, #b45f12 100%); }
+    /* 整組往上推，把畫面下緣讓給字幕；不然資產數字會跟字幕疊在一起看不清楚。 */
+    .rich-stage { position: relative; z-index: 2; display: grid; justify-items: center; text-align: center; padding: 3vw; transform: translateY(-14%); }
+    .rich-cat { position: relative; width: clamp(120px, 17.5vw, 250px); aspect-ratio: 1; border-radius: 28%; border: 5px solid #fff6d0; background: #fff; box-shadow: 0 14px 0 #8b4e08, 0 26px 46px #0007, 0 0 60px #fff2a8cc; animation: richBounce 1.15s ease-in-out infinite; }
+    .rich-crown { position: absolute; top: -.46em; left: 50%; transform: translateX(-50%) rotate(-9deg); font-size: clamp(34px, 5.4vw, 74px); filter: drop-shadow(0 5px 7px #0006); animation: crownTilt 1.15s ease-in-out infinite; }
+    .rich-amount { margin-top: .42em; color: #fffbe8; font-size: clamp(30px, 5.6vw, 78px); font-weight: 900; letter-spacing: .04em; -webkit-text-stroke: 2px #6b3a06; text-shadow: 0 6px 0 #8b4e08, 0 12px 26px #0008; font-variant-numeric: tabular-nums; }
+    .rich-label { margin-top: .05em; color: #4a2a05; font-size: clamp(13px, 1.9vw, 25px); font-weight: 900; letter-spacing: .16em; text-shadow: 0 2px 0 #ffe9a8; }
+    .coin { position: absolute; top: -12%; z-index: 1; font-size: clamp(20px, 2.6vw, 40px); animation: coinFall linear infinite; filter: drop-shadow(0 3px 4px #0005); }
+    @keyframes coinFall { from { transform: translateY(-10%) rotate(0deg); opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } to { transform: translateY(880%) rotate(760deg); opacity: 0; } }
+    @keyframes richBounce { 50% { transform: translateY(-13px) scale(1.03); } }
+    @keyframes crownTilt { 50% { transform: translateX(-50%) rotate(9deg) translateY(-5px); } }
+    /* 結尾字幕改成整行置中（其他場景是靠左），收尾畫面比較有正式片尾的感覺 */
+    .rich-scene .caption { left: 0; right: 0; bottom: 5.5%; max-width: none; padding: 0 6%; text-align: center; color: #fffdf2; text-shadow: 0 4px 0 #8b4e08, 0 8px 18px #0008; }
+    @media (prefers-reduced-motion: reduce) { .rich-cat, .rich-crown, .coin { animation: none; } }
+    @media (max-width: 720px) { body { padding: 0; } #trailer { width: 100vw; border-width: 0; border-radius: 0; } #controls { right: 9px; bottom: 11px; } #controls button { padding: 6px 9px; } }
+  </style>
+</head>
+<body>
+  <main id="trailer" aria-label="小球貓電鐵宣傳短片">
+    <section class="scene title-scene active" data-name="title" data-duration="5200">
+      <div class="title-copy"><span class="tag">台灣鐵道 × 歡樂大富翁</span><h1>小球貓電鐵</h1><h2>和貓咪一起，展開全台冒險！</h2></div>
+    </section>
+    <section class="scene" data-name="game" data-duration="5000">
+      <iframe title="小球貓電鐵遊戲畫面" src="小球貓電鐵v1.30.html?trailer=1" tabindex="-1"></iframe><div class="vignette"></div><div class="caption">搭上列車，走遍台灣每一站<small>在豐富的地圖上規劃你的旅程</small></div>
+    </section>
+    <section class="scene" data-name="dice" data-duration="10500">
+      <iframe title="正式遊戲擲骰與列車移動畫面" src="小球貓電鐵v1.30.html?trailer=1" tabindex="-1"></iframe><div class="vignette"></div><div class="caption">輪到你，擲骰出發！<small>正式遊戲畫面中的擲骰與旅程選擇</small></div>
+    </section>
+    <section class="scene" data-name="shortcut" data-duration="8000">
+      <iframe title="捷徑卡片直升機動畫" src="捷徑卡片直升機動畫模擬v1.0.html?trailer=1" tabindex="-1"></iframe><div class="vignette"></div><div class="top-label">🚁 蘇花捷徑卡片</div><div class="caption">善用卡片，突破距離限制<small>直升機帶你飛越山海，直達目的地</small></div>
+    </section>
+    <section class="scene" data-name="arrival" data-duration="7000">
+      <iframe title="目的地慶祝動畫" src="目的地慶祝動畫模擬v1.0.html?trailer=1" tabindex="-1"></iframe><div class="vignette"></div><div class="caption">抵達目的地，全站一起歡呼！<small>每一次進站，都是值得慶祝的冒險</small></div>
+    </section>
+    <section class="scene" data-name="settlement" data-duration="6000">
+      <iframe title="年度決算動畫" src="年度決算動畫模擬v0.4.html" tabindex="-1"></iframe><div class="vignette"></div><div class="caption">三月年度決算，誰是鐵道王者？<small>資產排行與歷年成長一目了然</small></div>
+    </section>
+    <section class="scene rich-scene" data-name="rich" data-duration="6800">
+      <div class="coins" id="coins" aria-hidden="true"></div>
+      <div class="rich-stage">
+        <div class="rich-cat" style="background: url('assets/avatars/賓士.png') center / cover;"><span class="rich-crown">👑</span></div>
+        <div class="rich-amount" id="rich-amount">100萬</div>
+        <div class="rich-label">總資產</div>
+      </div>
+      <div class="caption">從 100 萬起家，成為鐵道大富翁！<small>買下全台物產，讓資產一路翻倍成長</small></div>
+    </section>
+    <section class="scene closing-scene" data-name="closing" data-duration="5200">
+      <div class="closing-copy"><span class="tag">鐵道、卡片、目的地與驚喜</span><h1>下一站，等你出發！</h1><h2>小球貓電鐵</h2></div>
+    </section>
+    <div class="start-gate" id="start-gate"><div><button id="start" type="button">▶ 點擊開始播放</button><p>點擊後將以全螢幕播放宣傳短片</p></div></div>
+    <div id="controls" aria-label="短片控制"><button id="restart" type="button" title="重新播放">↻</button><button id="mute" type="button" title="靜音">🔊</button><button id="toggle" type="button" title="暫停">Ⅱ</button></div>
+    <!-- 背景音樂：前段（標題／地圖）用輕柔的春天曲，進入擲骰之後換成輕快的夏天曲帶動節奏，兩軌交叉淡入淡出。 -->
+    <audio id="bgm-calm" src="assets/audio/spring.mp3" loop preload="auto"></audio>
+    <audio id="bgm-happy" src="assets/audio/summer.mp3" loop preload="auto"></audio>
+    <div id="progress" aria-hidden="true"><i></i></div>
+  </main>
+  <script>
+    (() => {
+      const scenes = [...document.querySelectorAll('.scene')];
+      const fill = document.querySelector('#progress i');
+      const toggle = document.querySelector('#toggle');
+      const startGate = document.querySelector('#start-gate');
+      const start = document.querySelector('#start');
+      let index = 0, elapsed = 0, last = performance.now(), playing = false, frame;
+      const total = scenes.reduce((sum, scene) => sum + Number(scene.dataset.duration), 0);
+
+      // ── 背景音樂 ───────────────────────────────────────────────
+      // 瀏覽器的自動播放限制：一定要等使用者手勢才播得出來，所以全部從「點擊開始播放」那一刻才啟動。
+      const calm = document.querySelector('#bgm-calm');
+      const happy = document.querySelector('#bgm-happy');
+      const tracks = [calm, happy];
+      const PEAK = {calm: .55, happy: .5};   // 兩首曲子的母帶音量本來就不同，各自給一個上限
+      let muted = false, fadeTimer = null;
+      // 交叉淡入淡出：用 setInterval 逐步逼近目標音量，比一次切換自然，也不會讓兩首曲子同時全音量打架。
+      function fadeTo(target) {
+        clearInterval(fadeTimer);
+        fadeTimer = setInterval(() => {
+          let done = true;
+          tracks.forEach(track => {
+            const want = muted ? 0 : (track === target ? PEAK[track === calm ? 'calm' : 'happy'] : 0);
+            const diff = want - track.volume;
+            if (Math.abs(diff) < .03) { track.volume = want; }
+            else { track.volume = Math.max(0, Math.min(1, track.volume + Math.sign(diff) * .03)); done = false; }
+          });
+          // 音量歸零的那一軌直接暫停，避免兩軌一直空轉佔資源
+          tracks.forEach(track => { if (track.volume === 0 && !track.paused) track.pause(); });
+          if (done) clearInterval(fadeTimer);
+        }, 40);
+        if (!muted && target.paused) target.play().catch(() => {});
+      }
+      // 依目前場景決定該放哪一首：標題／地圖介紹輕柔，進入擲骰之後換成輕快版一路到結尾。
+      function musicFor(sceneName) {
+        return ['title', 'game'].includes(sceneName) ? calm : happy;
+      }
+      function syncMusic() {
+        if (startGate.hidden) fadeTo(musicFor(scenes[index].dataset.name));
+      }
+
+      // ── 結尾「有錢貓咪」的金幣雨與資產數字 ───────────────────────
+      const coinLayer = document.querySelector('#coins');
+      const amountEl = document.querySelector('#rich-amount');
+      // 金幣位置／速度固定用這組預先算好的亂數，讓每次播放的畫面一致（宣傳片不需要每次都不一樣）
+      [...Array(16)].forEach((_, i) => {
+        const coin = document.createElement('span');
+        coin.className = 'coin';
+        coin.textContent = i % 3 === 0 ? '💰' : '🪙';
+        coin.style.left = `${(i * 6.3 + (i % 4) * 3.5) % 96}%`;
+        coin.style.animationDuration = `${2.4 + (i % 5) * .55}s`;
+        coin.style.animationDelay = `${(i % 7) * .38}s`;
+        coinLayer.appendChild(coin);
+      });
+      // 跟遊戲 data.js 的 formatMoney() 同一套進位規則（萬→億→兆），結尾數字才跟遊戲內顯示一致
+      function formatMoney(wan) {
+        let abs = Math.round(Math.abs(wan));
+        const zhao = Math.floor(abs / 1e8); abs -= zhao * 1e8;
+        const yi = Math.floor(abs / 1e4); abs -= yi * 1e4;
+        const parts = [];
+        if (zhao > 0) parts.push(`${zhao}兆`);
+        if (yi > 0) parts.push(`${yi}億`);
+        if (abs > 0 || !parts.length) parts.push(`${abs}萬`);
+        return parts.join('');
+      }
+      const RICH_FROM = 100, RICH_TO = 88888;   // 從開局資金 100 萬滾到 8 億 8888 萬
+      let richTimer = null;
+      function runRichCounter() {
+        clearInterval(richTimer);
+        const started = performance.now(), span = 3400;
+        richTimer = setInterval(() => {
+          // easeOutCubic：一開始衝很快、接近目標時放慢，數字才有「越滾越誇張又穩穩收住」的感覺
+          const t = Math.min(1, (performance.now() - started) / span);
+          const eased = 1 - Math.pow(1 - t, 3);
+          amountEl.textContent = formatMoney(RICH_FROM + (RICH_TO - RICH_FROM) * eased);
+          if (t >= 1) clearInterval(richTimer);
+        }, 45);
+      }
+      function resetRichCounter() { clearInterval(richTimer); amountEl.textContent = formatMoney(RICH_FROM); }
+      function startEmbeddedScene(scene) {
+        // game 與 dice 都用宣傳版遊戲（v1.30）：收到 promoGameDemo 會直接跳過開場、
+        // 開一局由電腦自動遊玩的棋局，畫面就是真正的地圖與列車，不會停在標題畫面。
+        const message = {game:'promoGameDemo', dice:'promoGameDemo', shortcut:'playShortcutTrailer', arrival:'playArrivalTrailer'}[scene.dataset.name];
+        if (!message) return;
+        const frame = scene.querySelector('iframe');
+        const startAnimation = () => frame.contentWindow && frame.contentWindow.postMessage(message, '*');
+        if (frame.contentDocument && frame.contentDocument.readyState === 'complete') startAnimation();
+        else frame.addEventListener('load', startAnimation, { once: true });
+      }
+      function activate(next) {
+        scenes[index].classList.remove('active');
+        index = (next + scenes.length) % scenes.length;
+        scenes[index].classList.add('active');
+        startEmbeddedScene(scenes[index]);
+        // 結尾場景的數字要在切進來的當下才開始滾，太早跑完觀眾就看不到成長過程了
+        if (scenes[index].dataset.name === 'rich') runRichCounter(); else resetRichCounter();
+        syncMusic();
+      }
+      function tick(now) {
+        if (playing) {
+          elapsed += now - last;
+          const duration = Number(scenes[index].dataset.duration);
+          if (elapsed >= duration) {
+            if (index === scenes.length - 1) {
+              elapsed = duration;
+              playing = false;
+              toggle.textContent = '▶';
+              toggle.title = '播放';
+              tracks.forEach(track => track.pause());   // 片尾停住時音樂也跟著收，不要一直循環播下去
+            } else { elapsed = 0; activate(index + 1); }
+          }
+          const completed = scenes.slice(0, index).reduce((sum, scene) => sum + Number(scene.dataset.duration), 0) + elapsed;
+          fill.style.width = `${Math.min(100, completed / total * 100)}%`;
+        }
+        last = now;
+        frame = requestAnimationFrame(tick);
+      }
+      function restart() {
+        activate(0); elapsed = 0; last = performance.now(); playing = true;
+        toggle.textContent = 'Ⅱ'; toggle.title = '暫停';
+        tracks.forEach(track => { track.currentTime = 0; });   // 重播時音樂也從頭開始，不要接在上一輪的中間
+        syncMusic();
+      }
+      async function startTrailer() {
+        startGate.hidden = true;
+        playing = true;
+        last = performance.now();
+        // 音樂一定要在「使用者手勢的同一個呼叫堆疊」裡啟動，而且要排在 requestFullscreen 前面。
+        // 全螢幕是 async，一旦先 await 它，手勢授權就已經結束，後面再呼叫 play() 會被自動播放
+        // 政策擋掉（而且 .catch 是靜默的，失敗了畫面上完全看不出來，只會整片沒有配樂）。
+        syncMusic();
+        try { if (!document.fullscreenElement) await document.querySelector('#trailer').requestFullscreen(); } catch (_) {}
+      }
+      start.addEventListener('click', startTrailer);
+      document.querySelector('#restart').addEventListener('click', restart);
+      toggle.addEventListener('click', () => {
+        playing = !playing;
+        toggle.textContent = playing ? 'Ⅱ' : '▶'; toggle.title = playing ? '暫停' : '播放';
+        last = performance.now();
+        if (playing) syncMusic(); else tracks.forEach(track => track.pause());   // 暫停短片時音樂一起停
+      });
+      const muteBtn = document.querySelector('#mute');
+      muteBtn.addEventListener('click', () => {
+        muted = !muted;
+        muteBtn.textContent = muted ? '🔇' : '🔊';
+        muteBtn.title = muted ? '取消靜音' : '靜音';
+        if (muted) fadeTo(null); else syncMusic();
+      });
+      document.addEventListener('keydown', event => { if (startGate.hidden && event.code === 'Space') { event.preventDefault(); toggle.click(); } if (startGate.hidden && event.key === 'ArrowRight') { elapsed = 0; activate(index + 1); } });
+      frame = requestAnimationFrame(tick);
+    })();
+  </script>
+</body>
+</html>

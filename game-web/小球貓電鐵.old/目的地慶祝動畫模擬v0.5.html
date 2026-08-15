@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小球貓電鐵｜目的地到站動畫模擬 v0.5</title>
+<style>
+  /* ════════════════════════════════════════════════════════════════════
+     這一段是從正式遊戲（小球貓電鐵v1.16.html 的 #destination-celebration）
+     原封不動搬過來的，遊戲才是基準。v0.4 是「模擬器→遊戲」那個方向的舊版本，
+     移進遊戲後又改過很多（列車停靠位置、抵達文字位置、彩帶數量、提示時間、
+     多了第二段「繼續旅程」提示…），所以這一版反過來以遊戲為準重新同步。
+     唯一的差別：遊戲裡這層預設 display:none 由 JS 開啟，模擬器要一直看得到。
+     ════════════════════════════════════════════════════════════════════ */
+  #destination-celebration { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; background:#0b1620; }
+  /* 遊戲目前是 width:100vw;height:100vh 滿版鋪底圖，背景圖用 cover 裁切——不同解析度／
+     長寬比下，cover 裁掉的比例不一樣，月台地面線在畫面上的相對高度就會跑掉，車跟小朋友的
+     腳沒辦法固定貼在同一條地面線上。加 .fixed-ratio 這個 class：把舞台鎖定在跟背景圖同樣的
+     3:2 比例，讓 cover 永遠照同一個比例裁切，地面線的相對位置在任何解析度下都固定；
+     多出來的空間用 letterbox（深色留白）補滿，而不是把圖硬拉伸變形。
+     用右邊「固定比例」的開關可以直接切換比較兩種做法的差異。 */
+  #dc-stage { position:relative; width:100vw; height:100vh; overflow:hidden; background:#d8ebf4 url('../圖片/車站月台.png') center/cover no-repeat; }
+  #dc-stage.fixed-ratio { width:min(100vw, 150vh); height:min(100vh, 66.667vw); }
+  #dc-station-name { position:absolute; z-index:4; top:34%; left:50%; transform:translateX(-50%); min-width:180px; padding:9px 16px; border:4px solid #fff; border-radius:9px; box-shadow:0 5px #155377; background:#2775a7; color:#fff; text-align:center; font-size:clamp(20px,3vw,34px); font-weight:900; letter-spacing:.12em; }
+  #dc-kids { position:absolute; z-index:6; left:-7%; bottom:-5%; width:53%; height:auto; transform-origin:50% 100%; animation:dcCheer 1.02s ease-in-out infinite alternate; }
+  @keyframes dcCheer { from { transform:translateY(0) rotate(-.5deg); } to { transform:translateY(-14px) rotate(.5deg); } }
+  /* 列車的 width / right / bottom / 進站秒數在遊戲裡是寫死的，這裡改成吃 CSS 變數，
+     方便用右邊的滑桿即時微調每種車型的停靠位置（原本遊戲的值就是這些變數的預設值）。 */
+  #dc-train { position:absolute; z-index:7; width:var(--tw,150%); height:auto; right:var(--tfrom,-250%); bottom:var(--tb,-110%); transition:right var(--tdur,3.8s) cubic-bezier(.14,.77,.22,1); }
+  #dc-train.arrive { right:var(--tto,-75%); }
+  .dc-confetti { position:absolute; z-index:9; inset:0; pointer-events:none; overflow:hidden; } .dc-confetti i { position:absolute; top:-26px; left:var(--x); width:8px; height:15px; background:var(--c); animation:dcFall 2.8s linear infinite; animation-delay:var(--d); } @keyframes dcFall { to { transform:translate(var(--dx),670px) rotate(520deg); } }
+  #dc-arrival { position:absolute; z-index:12; top:22%; left:74%; transform:translateX(-50%); width:38%; text-align:center; color:#fff; text-shadow:0 3px 0 #16415c,0 5px 14px #16384e99; } #dc-arrival h2 { margin:0; font-size:clamp(28px,4vw,50px); } #dc-arrival p { margin:6px 0; font-size:clamp(14px,1.7vw,21px); font-weight:800; }
+  #dc-prompt { position:absolute; z-index:13; bottom:5%; left:50%; transform:translateX(-50%); padding:10px 17px; border:2px solid #fff8c8; border-radius:22px; background:#123a59e8; color:#fff; font-size:14px; font-weight:800; white-space:nowrap; opacity:0; transition:opacity .25s; animation:dcPulse 1.1s infinite; } #dc-prompt.show { opacity:1; } @keyframes dcPulse { 50% { transform:translateX(-50%) scale(1.06); } }
+  #dc-continue { position:absolute; z-index:16; bottom:5%; left:50%; transform:translateX(-50%); padding:10px 17px; border:2px solid #fff8c8; border-radius:22px; background:#123a59e8; color:#fff; font-size:14px; font-weight:800; white-space:nowrap; opacity:0; transition:opacity .25s; animation:dcPulse 1.1s infinite; } #dc-continue.show { opacity:1; }
+  #dc-next { position:absolute; z-index:15; top:19%; left:50%; width:min(86%,520px); transform:translateX(-50%) scale(.75); padding:22px 28px; border:4px solid #fff6bd; border-radius:18px; background:linear-gradient(135deg,#265f8e,#163d64); color:#fff; text-align:center; box-shadow:0 12px 30px #102c4088; opacity:0; transition:.4s ease; } #dc-next.show { transform:translateX(-50%) scale(1); opacity:1; } #dc-next small { display:block; color:#ffe68a; font-weight:800; letter-spacing:.12em; } #dc-next-name { display:block; margin-top:7px; font-size:clamp(31px,6vw,58px); }
+
+  /* ── 以下是模擬器自己的控制面板，遊戲裡沒有這一段 ───────────────── */
+  * { box-sizing:border-box; }
+  html, body { margin:0; width:100%; height:100%; overflow:hidden; font-family:"PingFang TC","Microsoft JhengHei",sans-serif; }
+  #ctl {
+    position:fixed; z-index:200; top:12px; right:12px; width:280px; max-height:calc(100vh - 24px); overflow:auto;
+    background:#101f2ee8; border:1px solid #2c4a68; border-radius:12px; padding:13px; color:#e8edf3; backdrop-filter:blur(7px);
+  }
+  #ctl h1 { margin:0 0 4px; font-size:14px; color:#F0A020; letter-spacing:.05em; }
+  #ctl .sub { font-size:11px; color:#7f9ab3; line-height:1.6; margin-bottom:10px; }
+  #ctl .lbl { font-size:11px; color:#8fa9c0; margin:11px 0 5px; letter-spacing:.05em; }
+  .trow { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+  .tbtn { font-family:inherit; font-size:12px; padding:7px 4px; border-radius:7px; cursor:pointer; text-align:center;
+          background:linear-gradient(#355f77,#1b374b); border:2px solid #5fa1c2; color:#fff; }
+  .tbtn:hover { border-color:#ffe27d; }
+  .tbtn.on { background:linear-gradient(#ffd560,#f4a51b); border-color:#fff2b7; color:#3a2400; font-weight:800; }
+  .srow { display:grid; grid-template-columns:64px 1fr 52px; align-items:center; gap:6px; font-size:11px; margin-bottom:5px; }
+  .srow input[type=range] { width:100%; }
+  .srow b { color:#ffd560; font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
+  #css-out { margin-top:9px; padding:8px; border-radius:7px; background:#07131f; border:1px solid #24425c;
+             font:600 10.5px ui-monospace,Menlo,monospace; color:#9fe0b8; white-space:pre-wrap; line-height:1.55; }
+  #ctl button.act { width:100%; margin-top:9px; font-family:inherit; font-size:12.5px; padding:8px; border-radius:8px; cursor:pointer;
+                    background:linear-gradient(#355f77,#1b374b); border:2px solid #5fa1c2; color:#fff; }
+  #ctl button.act:hover { border-color:#ffe27d; }
+</style>
+</head>
+<body>
+
+<!-- 這段 markup 也跟遊戲一致（只有 #dc-train 的 src 改成由模擬器切換） -->
+<div id="destination-celebration">
+  <div id="dc-stage">
+    <div id="dc-station-name"></div>
+    <img id="dc-kids" src="../圖片/慶祝到站的小朋友-去背.png" alt="歡呼慶祝的小朋友">
+    <img id="dc-train" src="../玩家icon/蒸氣火車頭（慢車）-去背.png" alt="到站列車">
+    <div class="dc-confetti">
+      <i style="--x:8%;--dx:65px;--d:.1s;--c:#ff6f91"></i><i style="--x:19%;--dx:-36px;--d:.8s;--c:#ffd45a"></i><i style="--x:31%;--dx:48px;--d:.4s;--c:#72d5b4"></i><i style="--x:43%;--dx:-70px;--d:1.1s;--c:#8d83e8"></i><i style="--x:55%;--dx:51px;--d:.3s;--c:#ff9568"></i><i style="--x:68%;--dx:-42px;--d:1.3s;--c:#ff6f91"></i><i style="--x:81%;--dx:62px;--d:.6s;--c:#ffd45a"></i><i style="--x:92%;--dx:-45px;--d:.9s;--c:#72d5b4"></i>
+    </div>
+    <div id="dc-arrival"><h2>🎉 抵達目的地！</h2><p id="dc-arrival-line"></p></div>
+    <div id="dc-prompt">按 A 或空白鍵，揭曉下一個目的地</div>
+    <div id="dc-next"><small>下一個目的地</small><b id="dc-next-name"></b></div>
+    <div id="dc-continue">按 A 或空白鍵，繼續旅程</div>
+  </div>
+</div>
+
+<div id="ctl">
+  <h1>🚉 到站動畫模擬 v0.5</h1>
+  <div class="sub">動畫已同步成跟遊戲 v1.16 完全一致。切換車型看各車進站效果，調好的數值回報給我再套進遊戲。</div>
+
+  <div class="lbl">不同解析度／長寬比下車、小朋友的高度會跑掉</div>
+  <div class="trow" style="grid-template-columns:1fr;">
+    <label class="tbtn" style="display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" id="s-fixratio" checked style="width:15px; height:15px;"> 固定 3:2 比例（修正版）
+    </label>
+  </div>
+  <div class="sub" style="margin-top:6px;">
+    遊戲現在是滿版鋪底圖（width:100vw;height:100vh），背景圖用 cover 裁切；長寬比不同時裁掉的比例不一樣，
+    月台地面線的相對高度就會跟著跑，車跟小朋友沒辦法固定貼在同一條地面線上。
+    勾選後把舞台鎖定成跟背景圖一樣的 3:2，多出來的空間用深色留白（letterbox）補滿，不裁切也不變形，
+    地面線在任何解析度下都在同一個相對位置。取消勾選可以直接比較兩種做法的差異，
+    也可以縮放瀏覽器視窗（或用手機/平板不同比例）實際測試。
+  </div>
+
+  <div class="lbl">列車車型（到站用原圖去背，不套用玩家顏色）</div>
+  <div class="trow" id="trainBtns">
+    <div class="tbtn" data-src="../玩家icon/蒸氣火車頭（慢車）-去背.png">慢車</div>
+    <div class="tbtn" data-src="../玩家icon/通勤電車（區間車）.png">快車</div>
+    <div class="tbtn" data-src="../玩家icon/普悠瑪（自強號）.png">自強號</div>
+    <div class="tbtn" data-src="../玩家icon/台灣高鐵-去背.png">高鐵</div>
+  </div>
+
+  <div class="lbl">停靠位置微調</div>
+  <div class="srow"><span>寬度</span><input type="range" id="s-tw" min="40" max="320" step="5" value="150"><b id="v-tw">150%</b></div>
+  <div class="srow"><span>停靠 right</span><input type="range" id="s-tto" min="-200" max="40" step="5" value="-75"><b id="v-tto">-75%</b></div>
+  <div class="srow"><span>底部 bottom</span><input type="range" id="s-tb" min="-200" max="30" step="5" value="-110"><b id="v-tb">-110%</b></div>
+  <div class="srow"><span>進站秒數</span><input type="range" id="s-tdur" min="1" max="8" step="0.1" value="3.8"><b id="v-tdur">3.8s</b></div>
+
+  <div id="css-out"></div>
+  <button class="act" id="replay">↻ 重新播放</button>
+  <button class="act" id="reset">回復遊戲現值</button>
+</div>
+
+<script>
+// 遊戲目前寫死的值（ui.js showDestinationCelebration 的時間點 + HTML 裡 #dc-train 的位置）
+const GAME_DEFAULTS = { tw:150, tto:-75, tb:-110, tdur:3.8 };
+const PROMPT_DELAY = 3650;   // 遊戲：3650ms 後才顯示「按 A 揭曉下一個目的地」
+const NEXT_DELAY   = 500;    // 遊戲：揭曉下一站後 500ms 才顯示「繼續旅程」
+
+const STATIONS = ['基隆','台北','桃園','新竹','台中','嘉義','台南','高雄','花蓮','台東','澎湖','金門'];
+const $ = id => document.getElementById(id);
+const stage = $('dc-stage'), train = $('dc-train');
+
+let ready = false, nextShown = false, cur = '', promptTimer = null, doneTimer = null;
+
+const SLIDERS = [
+  {id:'tw',   suffix:'%', css:'--tw'},
+  {id:'tto',  suffix:'%', css:'--tto'},
+  {id:'tb',   suffix:'%', css:'--tb'},
+  {id:'tdur', suffix:'s', css:'--tdur'},
+];
+function applySliders() {
+  SLIDERS.forEach(s => {
+    const v = $('s-' + s.id).value;
+    $('v-' + s.id).textContent = v + s.suffix;
+    train.style.setProperty(s.css, v + s.suffix);
+  });
+  // 起始位置固定在停靠位置左邊很遠處，讓列車一定是從畫面外滑進來
+  train.style.setProperty('--tfrom', (Number($('s-tto').value) - 175) + '%');
+  const tw = $('s-tw').value, tto = $('s-tto').value, tb = $('s-tb').value, tdur = $('s-tdur').value;
+  $('css-out').textContent =
+    `/* 要套進遊戲就是改這兩行 */\n#dc-train { width:${tw}%; bottom:${tb}%;\n  transition:right ${tdur}s cubic-bezier(.14,.77,.22,1); }\n#dc-train.arrive { right:${tto}%; }`;
+}
+
+function play() {
+  clearTimeout(promptTimer); clearTimeout(doneTimer);
+  ready = false; nextShown = false;
+  cur = STATIONS[Math.floor(Math.random() * STATIONS.length)];
+  $('dc-station-name').textContent = cur;
+  $('dc-arrival-line').textContent = `探險家 搶先抵達！獲得 1億2000萬元`;
+  $('dc-next').classList.remove('show');
+  $('dc-prompt').classList.remove('show');
+  $('dc-continue').classList.remove('show');
+  // 跟遊戲一樣：移除 arrive、強制 reflow、再加上 arrive，動畫才會重新跑
+  train.classList.remove('arrive');
+  void train.offsetWidth;
+  train.classList.add('arrive');
+  promptTimer = setTimeout(() => { ready = true; $('dc-prompt').classList.add('show'); }, PROMPT_DELAY);
+}
+
+// 跟遊戲 revealNextDestination() 同一套兩段式流程：第一次 A 揭曉下一站，第二次 A 才結束
+function advance() {
+  if (!ready) return;
+  if (nextShown) { play(); return; }
+  ready = false;
+  const next = STATIONS.filter(s => s !== cur)[Math.floor(Math.random() * (STATIONS.length - 1))];
+  $('dc-prompt').classList.remove('show');
+  $('dc-next-name').textContent = next;
+  $('dc-next').classList.add('show');
+  doneTimer = setTimeout(() => { nextShown = true; ready = true; $('dc-continue').classList.add('show'); }, NEXT_DELAY);
+}
+
+document.querySelectorAll('#trainBtns .tbtn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('#trainBtns .tbtn').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    train.src = btn.dataset.src;
+    // 點車型按鈕同時切全螢幕（沒進過全螢幕才切，已經在全螢幕就不重複要求）＋重播動畫，
+    // 這樣才能在跟遊戲一樣的實際畫面比例下看效果，不用另外再點一次全螢幕。
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+    play();
+  };
+});
+SLIDERS.forEach(s => { $('s-' + s.id).oninput = applySliders; });
+$('replay').onclick = play;
+$('reset').onclick = () => {
+  Object.entries(GAME_DEFAULTS).forEach(([k, v]) => { $('s-' + k).value = v; });
+  applySliders(); play();
+};
+addEventListener('keydown', e => {
+  if (e.code === 'Space' || (e.key || '').toLowerCase() === 'a') { e.preventDefault(); advance(); }
+});
+
+document.querySelector('#trainBtns .tbtn').classList.add('on');
+$('s-fixratio').onchange = () => stage.classList.toggle('fixed-ratio', $('s-fixratio').checked);
+stage.classList.toggle('fixed-ratio', $('s-fixratio').checked);
+applySliders();
+play();
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小球貓電鐵 v0.29 — Phase 1</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #0C1A28; --panel: #172B40cc; --rim: #254663;
+    --amber: #F0A020; --text: #D4E6F4; --lo: #5E84A4;
+    --ui: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  }
+  html, body { width:100%; height:100%; overflow:hidden; background:var(--navy); font-family:var(--ui); color:var(--text); }
+  #game { position:fixed; inset:0; width:100%; height:100%; display:block; cursor:grab; }
+
+  /* HUD 左上：月曆 + 玩家 */
+  #hud {
+    position:fixed; top:14px; left:14px; z-index:10;
+    background:var(--panel); border:1px solid var(--rim); border-radius:10px;
+    padding:12px 14px; backdrop-filter:blur(6px); min-width:200px;
+  }
+  #calendar { font-size:15px; font-weight:700; color:var(--amber); letter-spacing:.08em; margin-bottom:8px; }
+  .p-row { display:flex; align-items:center; gap:7px; padding:4px 6px; border-radius:6px; font-size:13px; }
+  .p-row.cur { background:rgba(240,160,32,.16); outline:1px solid rgba(240,160,32,.5); }
+  .p-row .dot { width:11px; height:11px; border-radius:50%; border:1.5px solid #fff; flex-shrink:0; }
+  .p-row .loc { color:var(--lo); font-size:11px; margin-left:auto; padding-left:10px; }
+
+  /* 控制列：下方中央 */
+  #controls {
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:10;
+    display:flex; align-items:center; gap:12px;
+  }
+  #btn-roll {
+    height:52px; padding:0 30px; font-size:18px; font-weight:700; font-family:var(--ui);
+    background:var(--amber); color:#20150a; border:none; border-radius:26px; cursor:pointer;
+    box-shadow:0 4px 16px rgba(0,0,0,.45); transition:transform .1s;
+  }
+  #btn-roll:hover:not(:disabled) { transform:scale(1.05); }
+  #btn-roll:disabled { opacity:.35; cursor:default; }
+  #btn-zoom {
+    height:44px; padding:0 16px; font-size:13px; font-family:var(--ui);
+    background:var(--panel); color:var(--text); border:1px solid var(--rim); border-radius:22px; cursor:pointer;
+  }
+
+  /* 骰子動畫 */
+  #dice {
+    position:fixed; top:38%; left:50%; transform:translate(-50%,-50%) scale(.4);
+    font-size:110px; z-index:20; opacity:0; pointer-events:none;
+    transition:all .35s cubic-bezier(.2,1.6,.4,1); color:#fff;
+    text-shadow:0 6px 24px rgba(0,0,0,.6);
+  }
+  #dice.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
+
+  /* 岔路箭頭 */
+  #branch-layer { position:fixed; inset:0; z-index:15; pointer-events:none; }
+  .branch-btn {
+    position:absolute; width:44px; height:44px; border-radius:50%; pointer-events:auto;
+    background:var(--amber); color:#20150a; border:2px solid #fff; cursor:pointer;
+    font-size:20px; display:flex; align-items:center; justify-content:center;
+    transform:rotate(var(--ang)); box-shadow:0 3px 12px rgba(0,0,0,.5);
+    animation:pulse 1s infinite alternate;
+  }
+  @keyframes pulse { from{box-shadow:0 0 0 0 rgba(240,160,32,.7);} to{box-shadow:0 0 0 12px rgba(240,160,32,0);} }
+  .branch-btn.green-btn {
+    background:#22C55E !important; color:#08290f; border-color:#fff;
+    animation:pulse-green 1s infinite alternate;
+  }
+  @keyframes pulse-green { from{box-shadow:0 0 0 0 rgba(34,197,94,.7);} to{box-shadow:0 0 0 12px rgba(34,197,94,0);} }
+
+  /* 提示 */
+  #toast {
+    position:fixed; bottom:92px; left:50%; transform:translateX(-50%) translateY(16px); z-index:20;
+    background:var(--panel); border:1px solid var(--rim); color:var(--text);
+    padding:10px 22px; border-radius:22px; font-size:14px; opacity:0; transition:all .25s;
+    backdrop-filter:blur(6px); white-space:nowrap;
+  }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* 小地圖 */
+  #minimap {
+    position:fixed; right:14px; bottom:14px; z-index:10;
+    border:1px solid var(--rim); border-radius:8px; background:#11263B;
+  }
+
+  /* 開局畫面 */
+  #setup {
+    position:fixed; inset:0; z-index:50; background:rgba(12,26,40,.92);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+  }
+  #setup h1 { font-size:34px; color:var(--amber); letter-spacing:.1em; }
+  #setup h1 .ver { font-size:14px; color:var(--lo); letter-spacing:.05em; vertical-align:middle; }
+  #setup p  { color:var(--lo); font-size:14px; }
+  #setup .row { display:flex; gap:14px; margin-top:10px; }
+  .n-btn {
+    width:96px; height:96px; font-size:17px; font-weight:700; font-family:var(--ui);
+    background:var(--panel); color:var(--text); border:2px solid var(--rim); border-radius:14px; cursor:pointer;
+    transition:all .15s;
+  }
+  .n-btn:hover { border-color:var(--amber); color:var(--amber); transform:translateY(-4px); }
+  #setup .hint { font-size:12px; color:var(--lo); margin-top:14px; }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="calendar">第 1 年　4 月</div>
+  <div id="roll-info" style="display:none;font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px;"></div>
+  <div id="destination" style="display:none;font-size:13px;font-weight:700;color:#FFD54A;margin-bottom:8px;"></div>
+  <div id="players"></div>
+</div>
+
+<div id="controls">
+  <button id="btn-roll" disabled>🎲 擲骰</button>
+  <button id="btn-zoom">🔍 全島 / 近景</button>
+</div>
+
+<div id="dice"></div>
+<div id="branch-layer"></div>
+<div id="toast"></div>
+<canvas id="minimap" width="190" height="218"></canvas>
+
+<div id="setup">
+  <h1>🐱 小球貓電鐵 <span class="ver">v0.29</span></h1>
+  <p>台灣版鐵道大富翁　—　Phase 1：會動的地圖</p>
+  <div class="row">
+    <button class="n-btn" data-n="2">2 人<br>對戰</button>
+    <button class="n-btn" data-n="3">3 人<br>對戰</button>
+    <button class="n-btn" data-n="4">4 人<br>對戰</button>
+  </div>
+  <p class="hint">同機輪流（hot-seat）・空白鍵擲骰・Z 或按鈕切換全島視角・滾輪縮放</p>
+</div>
+
+<script src="map_data.js?v=36"></script>
+<script src="src/data.js?v=36"></script>
+<script src="src/board.js?v=36"></script>
+<script src="src/render.js?v=36"></script>
+<script src="src/rules.js?v=36"></script>
+<script src="src/ui.js?v=36"></script>
+<script src="src/main.js?v=36"></script>
+</body>
+</html>

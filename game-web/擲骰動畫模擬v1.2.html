@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小球貓電鐵｜擲骰動畫模擬 v1.2</title>
+<style>
+/* ────────────────────────────────────────────────────────────────
+   擲骰動畫模擬 v1.2：起始／落下位置與大小改為可調，並存進共用設定檔。
+   v1.1 的骰子路徑是照抄正式遊戲的 CSS @keyframes，起點/終點的螢幕位置整組寫死在
+   keyframe 的百分比裡，沒辦法個別調整「從哪裡飛出來」「落在哪裡」「多大」。
+   這一版改成用 Web Animations API 在 JS 裡即時算路徑：
+   ‧ 起始位置／大小、落下位置／大小分別可用面板上的滑桿調整（單位是佔畫面寬高的
+     百分比），調整時即時套用不用重新整理。
+   ‧ 拿掉「要先按鍵收起骰子才能再擲」的限制——擲骰中或結果還停留著，隨時按擲骰／
+     空白鍵都會直接收掉重新丟一次，方便連續測試效果。
+   ‧ 設定改成跟「目的地慶祝動畫模擬」同一套做法：存檔直接寫進
+     game-web/dice_settings.js（window.DICE_SETTINGS = {...}），遊戲跟宣傳短片用一般
+     <script src> 載入，不受瀏覽器種類或是否同伺服器限制；IndexedDB 的資料庫／鍵名
+     跟地圖編輯器、到站動畫模擬完全一樣，已經授權過同一個專案資料夾的話不會再問。
+   骰子本身的視覺（六面圖／pip 貼圖方式／散落分層）沿用正式遊戲的設計，只是路徑
+   改成參數化，數字上不會跟 v1.1、正式遊戲的 CSS keyframes 逐格相同，但看起來是
+   同一種「小而遠→大而近」的拋接手感。
+   ──────────────────────────────────────────────────────────────── */
+:root { color-scheme: dark; --gold:#ffd24a; --ui:"PingFang TC","Microsoft JhengHei",system-ui,sans-serif; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #08161f; font-family: var(--ui); overflow: hidden; }
+#bg-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #1B5FA8; }
+.scrim { position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 46%, #0a1b2b66 0%, #0a1b2bb3 75%, #0a1b2bd9 100%); }
+header { position: fixed; z-index: 5; top: 3vh; left: 0; right: 220px; text-align: center; color: #fff;
+  text-shadow: 0 4px 0 #12304b, 0 7px 18px #0008; pointer-events: none; }
+header h1 { margin: 0; font-size: clamp(22px, 3.2vw, 40px); letter-spacing: .06em; }
+header p { margin: 6px 0 0; color: #d8efff; font-weight: 700; font-size: clamp(12px, 1.3vw, 15px); }
+
+#dice-layer { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
+.die {
+  position: absolute; display: block; aspect-ratio: 2948/3201;
+  background-image: url('../圖片/骰子/骰子六面圖v0.3.png'); background-size: 300% 200%; background-repeat: no-repeat;
+  filter: drop-shadow(0 16px 10px rgba(0,0,0,.42)); transform-origin: 50% 57%;
+  opacity: 0; will-change: transform, opacity;
+}
+.face-1 { background-position: 0% 0%; } .face-2 { background-position: 50% 0%; } .face-3 { background-position: 100% 0%; }
+.face-4 { background-position: 0% 100%; } .face-5 { background-position: 50% 100%; } .face-6 { background-position: 100% 100%; }
+.total {
+  position: fixed; z-index: 7; left: 50%; top: 20%; transform: translateX(-50%);
+  padding: .35em 1.1em; border: 3px solid #fff3b4; border-radius: 99px; background: #10314bE6;
+  color: var(--gold); font-weight: 900; font-size: clamp(19px, 3vw, 40px); letter-spacing: .08em;
+  opacity: 0; white-space: nowrap; transition: opacity .25s; pointer-events: none;
+}
+.total.show { opacity: 1; }
+
+/* ── 以下是模擬器自己的控制面板，遊戲裡沒有這一段 ───────────────── */
+#ctl { position: fixed; z-index: 20; top: 12px; right: 12px; width: 280px; max-height: calc(100vh - 24px); overflow: auto;
+  background: #101f2ee8; border: 1px solid #2c4a68; border-radius: 12px; padding: 13px; color: #e8edf3; backdrop-filter: blur(7px); }
+#ctl h2 { margin: 0 0 4px; font-size: 14px; color: #F0A020; letter-spacing: .05em; }
+#ctl .sub { font-size: 11px; color: #7f9ab3; line-height: 1.6; margin-bottom: 10px; }
+#ctl .lbl { font-size: 11px; color: #8fa9c0; margin: 11px 0 5px; letter-spacing: .05em; }
+.trow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.tbtn { font-family: inherit; font-size: 13px; padding: 8px 4px; border-radius: 7px; cursor: pointer; text-align: center;
+  background: linear-gradient(#355f77,#1b374b); border: 2px solid #5fa1c2; color: #fff; }
+.tbtn:hover { border-color: #ffe27d; }
+.tbtn.on { background: linear-gradient(#ffd560,#f4a51b); border-color: #fff2b7; color: #3a2400; font-weight: 800; }
+.srow { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 6px; font-size: 11px; margin-bottom: 5px; }
+.srow input[type=range] { width: 100%; }
+.srow b { color: #ffd560; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+#ctl button.act { width: 100%; margin-top: 9px; font-family: inherit; font-size: 12.5px; padding: 8px; border-radius: 8px; cursor: pointer;
+  background: linear-gradient(#355f77,#1b374b); border: 2px solid #5fa1c2; color: #fff; }
+#ctl button.act:hover { border-color: #ffe27d; }
+#dice-file-state { min-height: 2.4em; margin-top: 6px; color: #9fe0b8; font-size: 10.5px; line-height: 1.45; }
+.hint { position: fixed; z-index: 20; right: 292px; bottom: 15px; color: #d1e6f4; font-size: 13px; font-weight: 700; text-shadow: 0 2px 5px #000a; }
+@media (max-width: 760px) { #ctl { width: 220px; } .hint { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+<div class="scrim"></div>
+<header><h1>🎲 立體擲骰</h1><p>正式遊戲畫面 ＋ 可調整的擲骰動畫</p></header>
+<div id="dice-layer"></div>
+<div class="total" id="total"></div>
+<span class="hint">空白鍵也可以擲骰，隨時可以再按一次重新丟</span>
+
+<aside id="ctl">
+  <h2>擲骰動畫模擬 v1.2</h2>
+  <div class="sub">背景是共用棋盤 canvas（跟遊戲一樣的 map_data.js／render.js 畫出來）。骰子從「起始」位置小小地飛出，落到「落下」位置定格；下面滑桿可以個別調整兩端的位置與大小，單位都是佔畫面寬／高的百分比。</div>
+
+  <div class="lbl">骰子數量</div>
+  <div class="trow" id="countBtns">
+    <div class="tbtn" data-n="1">1 顆</div>
+    <div class="tbtn on" data-n="2">2 顆</div>
+    <div class="tbtn" data-n="3">3 顆</div>
+    <div class="tbtn" data-n="5">5 顆</div>
+  </div>
+
+  <div class="lbl">起始位置／大小（骰子飛出的地方）</div>
+  <div class="srow"><span>上下</span><input type="range" id="s-start-top" min="0" max="100" step="1" value="8"><b id="v-start-top">8%</b></div>
+  <div class="srow"><span>左右</span><input type="range" id="s-start-left" min="0" max="100" step="1" value="8"><b id="v-start-left">8%</b></div>
+  <div class="srow"><span>大小</span><input type="range" id="s-start-scale" min="0.1" max="1" step="0.02" value="0.22"><b id="v-start-scale">0.22x</b></div>
+
+  <div class="lbl">落下位置／大小（骰子定格的地方）</div>
+  <div class="srow"><span>上下</span><input type="range" id="s-end-top" min="0" max="100" step="1" value="63"><b id="v-end-top">63%</b></div>
+  <div class="srow"><span>左右</span><input type="range" id="s-end-left" min="0" max="100" step="1" value="72"><b id="v-end-left">72%</b></div>
+  <div class="srow"><span>大小</span><input type="range" id="s-end-scale" min="0.4" max="2" step="0.02" value="1"><b id="v-end-scale">1x</b></div>
+
+  <button class="act" id="pos-reset">位置／大小回復預設值</button>
+  <button class="act" id="roll">🎲 擲骰看看（可連續按）</button>
+  <button class="act" id="relocate">🗺 換一個場景</button>
+
+  <div class="lbl">設定檔（跟到站動畫模擬同一套做法）</div>
+  <div class="sub" style="margin-top:-4px;">存檔會直接寫進 game-web/dice_settings.js；遊戲跟宣傳短片直接讀這個檔案，不受瀏覽器種類或是否同伺服器限制。第一次存檔／開啟檔案會請你選一次「專案資料夾」；如果已經在地圖編輯器或到站動畫模擬選過同一個資料夾，這裡會直接沿用，不會再問一次。</div>
+  <button class="act" id="dice-open">📂 開啟設定檔</button>
+  <button class="act" id="dice-save">💾 存檔（寫入 dice_settings.js）</button>
+  <input type="file" id="dice-file-input" accept=".js,.json" style="display:none;">
+  <div id="dice-file-state"></div>
+</aside>
+
+<!-- 骰子起始／落下位置大小設定：跟遊戲、宣傳短片共用（見下方「設定檔」相關程式碼）；
+     還沒存過檔時這個檔案可能不存在，404 沒關係，安靜退回內建預設值。 -->
+<script src="dice_settings.js?v=1"></script>
+<script src="map_data.js"></script>
+<script src="src/data.js"></script>
+<script>window.Game = {players: [], cur: 0, state: 'awaitRoll', month: 6, destination: null, curPlayer() { return this.players[0]; }};</script>
+<script src="src/render-v1.28.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+Data.load();
+Render.init($('bg-canvas'));
+Render.freeLook = true;
+
+const RUN_STATIONS = ['tr_taipei', 'tr_taichung', 'tr_tainan', 'tr_kaohsiung', 'tr_hualien'];
+function relocate() {
+  const ids = [...Data.stations.keys()].filter(id => !Data.isTile(id));
+  const pick = RUN_STATIONS[Math.floor(Math.random() * RUN_STATIONS.length)];
+  const st = Data.stations.get(pick) || Data.stations.get(ids[Math.floor(Math.random() * ids.length)]);
+  Render.cam.x = Render.cam.tx = st.x;
+  Render.cam.y = Render.cam.ty = st.y;
+  Render.cam.scale = Render.cam.tscale = Render.ZOOM_NEAR;
+}
+relocate();
+$('relocate').onclick = relocate;
+
+// ── 起始／落下位置與大小：預設值對應正式遊戲原本寫死的位置
+// （落下 top:63% left:72%，起始概念上是左上方遠處、縮得很小飛過來）。
+const DEFAULT_POS = {
+  start: {top: 8, left: 8, scale: 0.22},
+  end: {top: 63, left: 72, scale: 1},
+};
+const DICE_BASE_WIDTH = {1: 205, 2: 180, 3: 160, 5: 135};   // 沿用正式遊戲各顆數的基準寬度
+const DICE_DEPTH_Y = [34, 54, 74];   // 深度分層：同一層只左右錯開，前排壓住後排下半部
+const DICE_LAYOUTS = {
+  1: [{x: 72, depth: 1}],
+  2: [{x: 58, depth: 0}, {x: 72, depth: 2}],
+  3: [{x: 45, depth: 0}, {x: 70, depth: 1}, {x: 58, depth: 2}],
+  5: [{x: 43, depth: 0}, {x: 70, depth: 0}, {x: 55, depth: 1}, {x: 78, depth: 1}, {x: 66, depth: 2}],
+};
+function shuffleDice(a) { return a.map(v => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(([, v]) => v); }
+
+let pos = window.DICE_SETTINGS && window.DICE_SETTINGS.start && window.DICE_SETTINGS.end
+  ? {start: {...window.DICE_SETTINGS.start}, end: {...window.DICE_SETTINGS.end}}
+  : {start: {...DEFAULT_POS.start}, end: {...DEFAULT_POS.end}};
+
+function renderPosControls() {
+  [['s-start-top','start','top','v-start-top','%'],['s-start-left','start','left','v-start-left','%'],['s-start-scale','start','scale','v-start-scale','x'],
+   ['s-end-top','end','top','v-end-top','%'],['s-end-left','end','left','v-end-left','%'],['s-end-scale','end','scale','v-end-scale','x']]
+    .forEach(([inputId, group, key, labelId, suffix]) => {
+      $(inputId).value = pos[group][key];
+      $(labelId).textContent = pos[group][key] + suffix;
+    });
+}
+renderPosControls();
+[['s-start-top','start','top','v-start-top','%'],['s-start-left','start','left','v-start-left','%'],['s-start-scale','start','scale','v-start-scale','x'],
+ ['s-end-top','end','top','v-end-top','%'],['s-end-left','end','left','v-end-left','%'],['s-end-scale','end','scale','v-end-scale','x']]
+  .forEach(([inputId, group, key, labelId, suffix]) => {
+    $(inputId).oninput = () => {
+      pos[group][key] = +$(inputId).value;
+      $(labelId).textContent = pos[group][key] + suffix;
+    };
+  });
+$('pos-reset').onclick = () => {
+  pos = {start: {...DEFAULT_POS.start}, end: {...DEFAULT_POS.end}};
+  renderPosControls();
+};
+
+let count = 2, activeDice = [], settleTimer = null, totalShown = false;
+document.querySelectorAll('#countBtns .tbtn').forEach(btn => btn.onclick = () => {
+  document.querySelectorAll('#countBtns .tbtn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  count = +btn.dataset.n;
+});
+
+// 每顆骰子擲出時各自的「彈跳手感」曲線（進度 0→1 對應的縮放／旋轉），5 種曲線互相
+// 錯開一點時間與旋轉方向，讓多顆骰子看起來不是完全同步、機械感的複製貼上。
+const THROW_SHAPES = [
+  {delay: 0,    spins: 2.2, dir: 1,  bounce: 1.12},
+  {delay: 40,   spins: 2.6, dir: -1, bounce: 1.15},
+  {delay: 70,   spins: 2.0, dir: 1,  bounce: 1.10},
+  {delay: 20,   spins: 2.4, dir: -1, bounce: 1.13},
+  {delay: 90,   spins: 2.8, dir: 1,  bounce: 1.16},
+];
+const THROW_MS = 800, LAND_MS = 280;
+
+function throwDie(die, startPx, endPx, endScale, shape) {
+  const dx0 = startPx.x - endPx.x, dy0 = startPx.y - endPx.y;
+  die.style.left = endPx.x + 'px';
+  die.style.top = endPx.y + 'px';
+  const anim = die.animate([
+    {transform: `translate(-50%,-50%) translate(${dx0}px,${dy0}px) scale(${pos.start.scale}) rotate(0deg)`, opacity: 0, offset: 0},
+    {transform: `translate(-50%,-50%) translate(${dx0}px,${dy0}px) scale(${pos.start.scale}) rotate(0deg)`, opacity: 1, offset: .12},
+    {transform: `translate(-50%,-50%) translate(${dx0 * .42}px,${dy0 * .42}px) scale(${endScale * shape.bounce * .92}) rotate(${shape.dir * shape.spins * 160}deg)`, opacity: 1, offset: .62},
+    {transform: `translate(-50%,-50%) translate(${dx0 * .12}px,${dy0 * .12}px) scale(${endScale * shape.bounce}) rotate(${shape.dir * shape.spins * 300}deg)`, opacity: 1, offset: .85},
+    {transform: `translate(-50%,-50%) translate(0,0) scale(${endScale}) rotate(${shape.dir * shape.spins * 360}deg)`, opacity: 1, offset: 1},
+  ], {duration: THROW_MS, delay: shape.delay, easing: 'cubic-bezier(.15,.8,.25,1)', fill: 'both'});
+  return anim;
+}
+function landDie(die, endScale) {
+  return die.animate([
+    {transform: 'translate(-50%,-50%) translateY(-5px) scale(' + (endScale * 1.08) + ')', filter: 'brightness(1.45) drop-shadow(0 22px 16px rgba(0,0,0,.55))'},
+    {transform: 'translate(-50%,-50%) translateY(0) scale(' + endScale + ')', filter: 'drop-shadow(0 16px 10px rgba(0,0,0,.42))'},
+  ], {duration: LAND_MS, easing: 'cubic-bezier(.2,1.5,.45,1)', fill: 'both'});
+}
+
+function stopCurrentThrow() {
+  clearTimeout(settleTimer);
+  activeDice.forEach(d => { d.anim && d.anim.cancel(); d.el.remove(); });
+  activeDice = [];
+  $('total').classList.remove('show');
+  totalShown = false;
+}
+
+function roll() {
+  stopCurrentThrow();
+  const layer = $('dice-layer');
+  const layout = DICE_LAYOUTS[count] || DICE_LAYOUTS[1];
+  const spots = shuffleDice(layout).map(spot => ({...spot, x: Math.max(8, Math.min(92, spot.x + (Math.random() * 6 - 3)))}));
+  const shapes = shuffleDice(THROW_SHAPES.slice(0, count));
+  const vw = innerWidth, vh = innerHeight;
+  const startPx = {x: vw * pos.start.left / 100, y: vh * pos.start.top / 100};
+  const endAnchorPx = {x: vw * pos.end.left / 100, y: vh * pos.end.top / 100};
+  const baseWidth = DICE_BASE_WIDTH[count] || DICE_BASE_WIDTH[1];
+  // 骰子的實際尺寸完全交給動畫的 scale() 決定，這裡的內建寬度只用基準值，不能再乘一次
+  // pos.end.scale——不然「落下大小」滑桿會跟動畫的 scale(endScale) 疊乘，越調越誇張。
+  const dieWidth = baseWidth;
+  const values = [];
+  spots.forEach((spot, i) => {
+    const value = 1 + Math.floor(Math.random() * 6);
+    values.push(value);
+    const die = document.createElement('span');
+    die.className = `die face-${value}`;
+    die.style.width = dieWidth + 'px';
+    die.style.zIndex = String(spot.depth + 1);
+    layer.appendChild(die);
+    // 散落範圍隨落下大小一起縮放，骰子變大時彼此散得更開，不會擠成一團。
+    const endPx = {
+      x: endAnchorPx.x + (spot.x - 72) / 100 * 340 * pos.end.scale,
+      y: endAnchorPx.y + (DICE_DEPTH_Y[spot.depth] - 54) / 100 * 220 * pos.end.scale,
+    };
+    const anim = throwDie(die, startPx, endPx, pos.end.scale, shapes[i % shapes.length]);
+    activeDice.push({el: die, anim, endPx, endScale: pos.end.scale});
+  });
+  const total = values.reduce((a, b) => a + b, 0);
+  settleTimer = setTimeout(() => {
+    activeDice.forEach(d => landDie(d.el, d.endScale));
+    $('total').textContent = `🎲 擲出 ${total} 點！`;
+    $('total').classList.add('show');
+    totalShown = true;
+  }, THROW_MS + Math.max(...shapes.map(s => s.delay)));
+}
+$('roll').onclick = roll;
+addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); roll(); } });
+addEventListener('resize', () => { if (activeDice.length) roll(); });   // 視窗大小變了，位置百分比要重算，直接重丟一次
+
+// ── 設定檔（跟「目的地慶祝動畫模擬」同一套做法）───────────────────────────
+// IndexedDB 的資料庫／店名／鍵名故意跟地圖編輯器、到站動畫模擬完全一樣
+// （'map-editor-handles' / 'h' / 'projectDir'），同網域下已經授權過同一個
+// 專案資料夾的話，這裡會直接沿用，不會再跳出選擇視窗。
+const DICE_FILE_NAME = 'dice_settings.js';
+const _DB = (() => {
+  const openDb = () => new Promise((res, rej) => {
+    const r = indexedDB.open('map-editor-handles', 1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore('h');
+    r.onsuccess = e => res(e.target.result);
+    r.onerror = e => rej(e.target.error);
+  });
+  return {
+    async get(key) {
+      try { const db = await openDb(); return new Promise(res => { const r = db.transaction('h').objectStore('h').get(key); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); }); }
+      catch (_) { return null; }
+    },
+    async put(key, val) {
+      try { const db = await openDb(); db.transaction('h', 'readwrite').objectStore('h').put(val, key); } catch (_) {}
+    },
+  };
+})();
+let projectDirHandle = null;
+(async () => { projectDirHandle = await _DB.get('projectDir'); })();
+async function ensureProjectDirHandle(promptIfMissing) {
+  if (projectDirHandle) {
+    try {
+      let perm = await projectDirHandle.queryPermission({mode: 'readwrite'});
+      if (perm !== 'granted') perm = await projectDirHandle.requestPermission({mode: 'readwrite'});
+      if (perm === 'granted') return projectDirHandle;
+    } catch (_) {}
+  }
+  if (!promptIfMissing || !window.showDirectoryPicker) return null;
+  setDiceFileState('請選擇「專案資料夾」（例如「小球貓電鐵」，裡面要有 game-web 這一層）……');
+  try {
+    const handle = await window.showDirectoryPicker({id: 'project-dir', mode: 'readwrite'});
+    try { await handle.getDirectoryHandle('game-web'); }
+    catch (_) {
+      setDiceFileState(`「${handle.name}」裡面找不到 game-web 子資料夾，請選專案資料夾再試一次。`, true);
+      return null;
+    }
+    projectDirHandle = handle;
+    await _DB.put('projectDir', handle);
+    return handle;
+  } catch (err) {
+    if (err.name !== 'AbortError') setDiceFileState('選擇專案資料夾失敗：' + err.message, true);
+    return null;
+  }
+}
+async function ensureGameDirHandle(promptIfMissing) {
+  const proj = await ensureProjectDirHandle(promptIfMissing);
+  if (!proj) return null;
+  try { return await proj.getDirectoryHandle('game-web'); } catch (_) { return null; }
+}
+function setDiceFileState(message, warn = false) {
+  const el = $('dice-file-state');
+  el.textContent = message;
+  el.style.color = warn ? '#ffe27d' : '#9fe0b8';
+}
+function serializeDiceSettings(cfg) {
+  return `// 由「擲骰動畫模擬」存檔產生，遊戲跟宣傳短片共用這份設定。\n` +
+    `// 請不要手動編輯這個檔案——改用模擬器的控制面板調整後按「存檔」。\n` +
+    `window.DICE_SETTINGS = ${JSON.stringify(cfg, null, 2)};\n`;
+}
+function parseDiceSettingsText(text) {
+  const m = text.match(/window\.DICE_SETTINGS\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+  if (!m) throw new Error('格式不對，找不到 window.DICE_SETTINGS = {...}');
+  return JSON.parse(m[1]);
+}
+function applyLoadedDiceSettings(cfg) {
+  if (cfg.start) pos.start = {...DEFAULT_POS.start, ...cfg.start};
+  if (cfg.end) pos.end = {...DEFAULT_POS.end, ...cfg.end};
+  renderPosControls();
+}
+async function saveDiceFile() {
+  const text = serializeDiceSettings(pos);
+  const dir = await ensureGameDirHandle(true);
+  if (dir) {
+    try {
+      const fh = await dir.getFileHandle(DICE_FILE_NAME, {create: true});
+      const w = await fh.createWritable();
+      await w.write(text);
+      await w.close();
+      setDiceFileState(`已存檔到 game-web/${DICE_FILE_NAME}，遊戲跟宣傳短片下次載入會直接讀到。`);
+      return;
+    } catch (err) {
+      setDiceFileState('寫入檔案失敗：' + err.message, true);
+    }
+  }
+  const blob = new Blob([text], {type: 'text/javascript;charset=utf-8'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = DICE_FILE_NAME;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 0);
+  setDiceFileState(`瀏覽器不支援直接寫入，已下載 ${DICE_FILE_NAME}，請手動放進 game-web 資料夾覆蓋同名檔案。`, true);
+}
+async function openDiceFile() {
+  const dir = await ensureGameDirHandle(true);
+  if (dir) {
+    try {
+      const fh = await dir.getFileHandle(DICE_FILE_NAME);
+      const text = await (await fh.getFile()).text();
+      applyLoadedDiceSettings(parseDiceSettingsText(text));
+      setDiceFileState(`已載入 game-web/${DICE_FILE_NAME}。`);
+      return;
+    } catch (err) {
+      if (err.name !== 'NotFoundError') { setDiceFileState('讀取失敗：' + err.message, true); return; }
+      setDiceFileState(`game-web 裡還沒有 ${DICE_FILE_NAME}，請先按「存檔」建立一份。`, true);
+      return;
+    }
+  }
+  if (window.showOpenFilePicker) {
+    try {
+      const [fh] = await window.showOpenFilePicker({types: [{description: 'JS 設定檔', accept: {'text/javascript': ['.js']}}]});
+      applyLoadedDiceSettings(parseDiceSettingsText(await (await fh.getFile()).text()));
+      setDiceFileState('已載入 ' + fh.name + '。');
+    } catch (err) { if (err.name !== 'AbortError') setDiceFileState('開啟失敗：' + err.message, true); }
+    return;
+  }
+  $('dice-file-input').click();
+}
+$('dice-file-input').onchange = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  file.text().then(text => {
+    applyLoadedDiceSettings(parseDiceSettingsText(text));
+    setDiceFileState('已載入 ' + file.name + '。');
+  }).catch(err => setDiceFileState('開啟失敗：' + err.message, true));
+  e.target.value = '';
+};
+$('dice-open').onclick = openDiceFile;
+$('dice-save').onclick = saveDiceFile;
+</script>
+</body>
+</html>

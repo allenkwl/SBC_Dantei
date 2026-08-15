@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小球貓電鐵｜目的地到站動畫模擬 v1.1</title>
+<style>
+  /* ════════════════════════════════════════════════════════════════════
+     這一段是從正式遊戲（小球貓電鐵v1.16.html 的 #destination-celebration）
+     原封不動搬過來的，遊戲才是基準。v0.4 是「模擬器→遊戲」那個方向的舊版本，
+     移進遊戲後又改過很多（列車停靠位置、抵達文字位置、彩帶數量、提示時間、
+     多了第二段「繼續旅程」提示…），所以這一版反過來以遊戲為準重新同步。
+     唯一的差別：遊戲裡這層預設 display:none 由 JS 開啟，模擬器要一直看得到。
+     ════════════════════════════════════════════════════════════════════ */
+  #destination-celebration { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; background:#0b1620; }
+  /* 遊戲目前是 width:100vw;height:100vh 滿版鋪底圖，背景圖用 cover 裁切——不同解析度／
+     長寬比下，cover 裁掉的比例不一樣，月台地面線在畫面上的相對高度就會跑掉，車跟小朋友的
+     腳沒辦法固定貼在同一條地面線上。加 .fixed-ratio 這個 class：把舞台鎖定在跟背景圖同樣的
+     3:2 比例，讓 cover 永遠照同一個比例裁切，地面線的相對位置在任何解析度下都固定；
+     多出來的空間用 letterbox（深色留白）補滿，而不是把圖硬拉伸變形。
+     用右邊「固定比例」的開關可以直接切換比較兩種做法的差異。 */
+  #dc-stage { position:relative; width:100vw; height:100vh; overflow:hidden; background:#d8ebf4 url('../圖片/車站月台.png') center/cover no-repeat; }
+  #dc-stage.fixed-ratio { width:min(100vw, 150vh); height:min(100vh, 66.667vw); }
+  #dc-station-name { position:absolute; z-index:4; top:34%; left:50%; transform:translateX(-50%); min-width:180px; padding:9px 16px; border:4px solid #fff; border-radius:9px; box-shadow:0 5px #155377; background:#2775a7; color:#fff; text-align:center; font-size:clamp(20px,3vw,34px); font-weight:900; letter-spacing:.12em; }
+  /* 小朋友數量與位置改為模擬器可調（見下方「小朋友」控制面板，是模擬器獨有的擴充，
+     遊戲裡目前還是固定 4 位、寫死位置——這一段容器改成鋪滿整個舞台，每位小朋友的
+     left/bottom/width 直接以「佔舞台寬高的百分比」為單位，由 JS 依清單即時算出、
+     寫成 inline style，不再用 nth-child 寫死位置。跳動節奏仍沿用原本 4 種參數循環套用，
+     新增的小朋友看起來還是會錯開，不會整齊到很假。 */
+  #dc-kids { position:absolute; z-index:6; inset:0; pointer-events:none; }
+  .dc-kid { position:absolute; height:auto; transform-origin:50% 100%; filter:drop-shadow(0 3px 2px #19374855); animation:dcCheer var(--jump-duration) ease-in-out var(--jump-delay) infinite alternate; }
+  @keyframes dcCheer { from { transform:translateY(0) rotate(0deg); } to { transform:translateY(calc(-1 * var(--jump-height))) rotate(var(--jump-tilt)); } }
+  /* 車站時鐘：背景圖裡的時鐘指針是畫死在固定時間的靜態插圖，這裡疊一個用真實時間
+     即時轉動指針的 DOM 時鐘蓋在同一個位置上（面盤／外框／12,3,6,9 數字重新畫一份，
+     蓋住底圖那組畫死的指針，其餘位置與比例照抓圖量出的座標對齊）。
+     只加在模擬器，遊戲背景圖本身沒有這個需求，不用同步。
+     位置量法：先在原圖（1536×1024）量出時鐘圓心與直徑的像素座標，圓心 X 用「佔圖片寬度
+     的百分比」、圓心 Y 與直徑用「佔圖片高度的百分比」分別換算——因為 #dc-stage 在
+     .fixed-ratio 模式下是精確鎖定跟原圖同樣的 3:2，兩種百分比不會互相干擾，
+     疊上去剛好對齊，不用在意目前視窗實際比例。 */
+  #dc-clock { position:absolute; z-index:3; left:49.9%; top:19.9%; width:16.9%; height:25.4%; transform:translate(-50%,-50%);
+    border-radius:50%; background:#f8e9c9; border:solid #24222a; border-width:6%;
+    box-shadow:0 4px 10px #00000059, inset 0 0 0 2px #ffffff66; }
+  .dc-clock-tick { position:absolute; left:50%; top:0; width:2px; height:50%; margin-left:-1px; transform-origin:50% 100%; }
+  .dc-clock-tick::before { content:''; position:absolute; top:6%; left:0; width:2px; height:11%; background:#6b4a2c; }
+  .dc-clock-num { position:absolute; font-weight:800; color:#6b4a2c; font-size:15%; line-height:1; font-family:ui-monospace,Menlo,monospace; }
+  .dc-clock-num.n12 { top:8%; left:50%; transform:translate(-50%,0); }
+  .dc-clock-num.n3  { top:50%; right:9%; transform:translate(0,-50%); }
+  .dc-clock-num.n6  { bottom:6%; left:50%; transform:translate(-50%,0); }
+  .dc-clock-num.n9  { top:50%; left:9%; transform:translate(0,-50%); }
+  .dc-clock-hand { position:absolute; left:50%; bottom:50%; border-radius:3px; background:linear-gradient(#3c2c1c,#1b120a); transform-origin:50% 100%; }
+  .dc-clock-hand.hour { width:7%; height:25%; margin-left:-3.5%; }
+  .dc-clock-hand.min  { width:4.5%; height:36%; margin-left:-2.25%; }
+  .dc-clock-pivot { position:absolute; left:50%; top:50%; width:9%; height:9%; margin:-4.5% 0 0 -4.5%; border-radius:50%; background:#4a3626; box-shadow:0 0 0 1px #2a1d1266; }
+  /* 列車的 width / right / bottom / 進站秒數在遊戲裡是寫死的，這裡改成吃 CSS 變數，
+     方便用右邊的滑桿即時微調每種車型的停靠位置（原本遊戲的值就是這些變數的預設值）。 */
+  #dc-train { position:absolute; z-index:7; width:var(--tw,150%); height:auto; right:var(--tfrom,-250%); bottom:var(--tb,-110%); transition:right var(--tdur,3.8s) cubic-bezier(.14,.77,.22,1); }
+  #dc-train.arrive { right:var(--tto,-75%); }
+  .dc-confetti { position:absolute; z-index:9; inset:0; pointer-events:none; overflow:hidden; } .dc-confetti i { position:absolute; top:-26px; left:var(--x); width:8px; height:15px; background:var(--c); animation:dcFall 2.8s linear infinite; animation-delay:var(--d); } @keyframes dcFall { to { transform:translate(var(--dx),670px) rotate(520deg); } }
+  #dc-arrival { position:absolute; z-index:12; top:22%; left:74%; transform:translateX(-50%); width:38%; text-align:center; color:#fff; text-shadow:0 3px 0 #16415c,0 5px 14px #16384e99; } #dc-arrival h2 { margin:0; font-size:clamp(28px,4vw,50px); } #dc-arrival p { margin:6px 0; font-size:clamp(14px,1.7vw,21px); font-weight:800; }
+  #dc-prompt { position:absolute; z-index:13; bottom:5%; left:50%; transform:translateX(-50%); padding:10px 17px; border:2px solid #fff8c8; border-radius:22px; background:#123a59e8; color:#fff; font-size:14px; font-weight:800; white-space:nowrap; opacity:0; transition:opacity .25s; animation:dcPulse 1.1s infinite; } #dc-prompt.show { opacity:1; } @keyframes dcPulse { 50% { transform:translateX(-50%) scale(1.06); } }
+  #dc-continue { position:absolute; z-index:16; bottom:5%; left:50%; transform:translateX(-50%); padding:10px 17px; border:2px solid #fff8c8; border-radius:22px; background:#123a59e8; color:#fff; font-size:14px; font-weight:800; white-space:nowrap; opacity:0; transition:opacity .25s; animation:dcPulse 1.1s infinite; } #dc-continue.show { opacity:1; }
+  #dc-next { position:absolute; z-index:15; top:19%; left:50%; width:min(86%,520px); transform:translateX(-50%) scale(.75); padding:22px 28px; border:4px solid #fff6bd; border-radius:18px; background:linear-gradient(135deg,#265f8e,#163d64); color:#fff; text-align:center; box-shadow:0 12px 30px #102c4088; opacity:0; transition:.4s ease; } #dc-next.show { transform:translateX(-50%) scale(1); opacity:1; } #dc-next small { display:block; color:#ffe68a; font-weight:800; letter-spacing:.12em; } #dc-next-name { display:block; margin-top:7px; font-size:clamp(31px,6vw,58px); }
+
+  /* ── 以下是模擬器自己的控制面板，遊戲裡沒有這一段 ───────────────── */
+  * { box-sizing:border-box; }
+  html, body { margin:0; width:100%; height:100%; overflow:hidden; font-family:"PingFang TC","Microsoft JhengHei",sans-serif; }
+  #ctl {
+    position:fixed; z-index:200; top:12px; right:12px; width:280px; max-height:calc(100vh - 24px); overflow:auto;
+    background:#101f2ee8; border:1px solid #2c4a68; border-radius:12px; padding:13px; color:#e8edf3; backdrop-filter:blur(7px);
+  }
+  #ctl h1 { margin:0 0 4px; font-size:14px; color:#F0A020; letter-spacing:.05em; }
+  #ctl .sub { font-size:11px; color:#7f9ab3; line-height:1.6; margin-bottom:10px; }
+  #ctl .lbl { font-size:11px; color:#8fa9c0; margin:11px 0 5px; letter-spacing:.05em; }
+  .trow { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+  .tbtn { font-family:inherit; font-size:12px; padding:7px 4px; border-radius:7px; cursor:pointer; text-align:center;
+          background:linear-gradient(#355f77,#1b374b); border:2px solid #5fa1c2; color:#fff; }
+  .tbtn:hover { border-color:#ffe27d; }
+  .tbtn.on { background:linear-gradient(#ffd560,#f4a51b); border-color:#fff2b7; color:#3a2400; font-weight:800; }
+  .srow { display:grid; grid-template-columns:64px 1fr 52px; align-items:center; gap:6px; font-size:11px; margin-bottom:5px; }
+  .srow input[type=range] { width:100%; }
+  .srow b { color:#ffd560; font-weight:700; text-align:right; font-variant-numeric:tabular-nums; }
+  #css-out { margin-top:9px; padding:8px; border-radius:7px; background:#07131f; border:1px solid #24425c;
+             font:600 10.5px ui-monospace,Menlo,monospace; color:#9fe0b8; white-space:pre-wrap; line-height:1.55; }
+  #ctl button.act { width:100%; margin-top:9px; font-family:inherit; font-size:12.5px; padding:8px; border-radius:8px; cursor:pointer;
+                    background:linear-gradient(#355f77,#1b374b); border:2px solid #5fa1c2; color:#fff; }
+  #ctl button.act:hover { border-color:#ffe27d; }
+  #save-state { min-height:2.8em; margin-top:7px; color:#9fe0b8; font-size:10.5px; line-height:1.45; }
+  #save-state.warn { color:#ffe27d; }
+  .kid-row { margin-bottom:8px; padding:7px; border-radius:8px; background:#0d2033; border:1px solid #24425c; }
+  .kid-row-head { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:5px; }
+  .kid-cycle { flex:1; font-family:inherit; font-size:11px; padding:5px 6px; border-radius:6px; cursor:pointer;
+               background:linear-gradient(#355f77,#1b374b); border:2px solid #5fa1c2; color:#fff; text-align:left; }
+  .kid-cycle:hover { border-color:#ffe27d; }
+  .kid-del { font-family:inherit; font-size:12px; width:26px; height:26px; border-radius:6px; cursor:pointer;
+             background:#5c2020; border:2px solid #b5573f; color:#ffd7c9; }
+  .kid-del:hover { border-color:#ff9d7d; }
+  .kid-sliders { display:grid; grid-template-columns:1fr; gap:3px; }
+  .kid-sliders label { display:grid; grid-template-columns:32px 1fr; align-items:center; gap:6px; font-size:10.5px; color:#8fa9c0; }
+  .kid-sliders input[type=range] { width:100%; }
+</style>
+</head>
+<body>
+
+<!-- 這段 markup 也跟遊戲一致（只有 #dc-train 的 src 改成由模擬器切換） -->
+<div id="destination-celebration">
+  <div id="dc-stage">
+    <div id="dc-station-name"></div>
+    <!-- 車站時鐘：疊在背景圖同一個時鐘位置上，指針由 JS 依真實時間即時轉動（模擬器獨有）。 -->
+    <div id="dc-clock" aria-hidden="true">
+      <div class="dc-clock-num n12">12</div><div class="dc-clock-num n3">3</div>
+      <div class="dc-clock-num n6">6</div><div class="dc-clock-num n9">9</div>
+      <div class="dc-clock-hand hour" id="dc-clock-hour"></div>
+      <div class="dc-clock-hand min" id="dc-clock-min"></div>
+      <div class="dc-clock-pivot"></div>
+    </div>
+    <!-- 小朋友的數量與位置改為由 JS 依 kids 清單即時渲染（見下方腳本），不再是固定 4 個 <img>。 -->
+    <div id="dc-kids" aria-label="歡呼慶祝的小朋友"></div>
+    <img id="dc-train" src="../圖片/玩家icon/普悠瑪（自強號）.png" alt="到站列車">
+    <audio id="dc-cheer" preload="auto" src="../音樂.音效/歡呼聲.wav"></audio>
+    <div class="dc-confetti">
+      <i style="--x:8%;--dx:65px;--d:.1s;--c:#ff6f91"></i><i style="--x:19%;--dx:-36px;--d:.8s;--c:#ffd45a"></i><i style="--x:31%;--dx:48px;--d:.4s;--c:#72d5b4"></i><i style="--x:43%;--dx:-70px;--d:1.1s;--c:#8d83e8"></i><i style="--x:55%;--dx:51px;--d:.3s;--c:#ff9568"></i><i style="--x:68%;--dx:-42px;--d:1.3s;--c:#ff6f91"></i><i style="--x:81%;--dx:62px;--d:.6s;--c:#ffd45a"></i><i style="--x:92%;--dx:-45px;--d:.9s;--c:#72d5b4"></i>
+    </div>
+    <div id="dc-arrival"><h2>🎉 抵達目的地！</h2><p id="dc-arrival-line"></p></div>
+    <div id="dc-prompt">按 A 或空白鍵，揭曉下一個目的地</div>
+    <div id="dc-next"><small>下一個目的地</small><b id="dc-next-name"></b></div>
+    <div id="dc-continue">按 A 或空白鍵，繼續旅程</div>
+  </div>
+</div>
+
+<div id="ctl">
+  <h1>🚉 到站動畫模擬 v1.1</h1>
+  <div class="sub">每種列車各自保存停靠參數；切換列車會讀回該列車上次調整的數值。列車進站時播放歡呼聲。車站時鐘改為即時顯示現在時間；小朋友可自行新增、切換造型與調整位置。</div>
+
+  <div class="lbl">不同解析度／長寬比下車、小朋友的高度會跑掉</div>
+  <div class="trow" style="grid-template-columns:1fr;">
+    <label class="tbtn" style="display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" id="s-fixratio" checked style="width:15px; height:15px;"> 固定 3:2 比例（修正版）
+    </label>
+  </div>
+  <div class="sub" style="margin-top:6px;">
+    遊戲現在是滿版鋪底圖（width:100vw;height:100vh），背景圖用 cover 裁切；長寬比不同時裁掉的比例不一樣，
+    月台地面線的相對高度就會跟著跑，車跟小朋友沒辦法固定貼在同一條地面線上。
+    勾選後把舞台鎖定成跟背景圖一樣的 3:2，多出來的空間用深色留白（letterbox）補滿，不裁切也不變形，
+    地面線在任何解析度下都在同一個相對位置。取消勾選可以直接比較兩種做法的差異，
+    也可以縮放瀏覽器視窗（或用手機/平板不同比例）實際測試。
+  </div>
+
+  <div class="lbl">到站載具（使用原圖，不套用玩家顏色）</div>
+  <div class="trow" id="trainBtns">
+    <div class="tbtn" data-train="slow" data-src="../圖片/玩家icon/蒸氣火車頭（慢車）-去背.png">慢車</div>
+    <div class="tbtn" data-train="commuter" data-src="../圖片/玩家icon/通勤電車（區間車）.png">快車</div>
+    <div class="tbtn on" data-train="puyuma" data-src="../圖片/玩家icon/普悠瑪（自強號）.png">普悠瑪</div>
+    <div class="tbtn" data-train="highspeed" data-src="../圖片/玩家icon/台灣高鐵-去背.png">高鐵</div>
+  </div>
+
+  <div class="lbl">停靠位置微調</div>
+  <div class="srow"><span>寬度</span><input type="range" id="s-tw" min="40" max="320" step="5" value="150"><b id="v-tw">150%</b></div>
+  <div class="srow"><span>停靠 right</span><input type="range" id="s-tto" min="-200" max="40" step="5" value="-75"><b id="v-tto">-75%</b></div>
+  <div class="srow"><span>底部 bottom</span><input type="range" id="s-tb" min="-200" max="30" step="5" value="-110"><b id="v-tb">-110%</b></div>
+  <div class="srow"><span>進站秒數</span><input type="range" id="s-tdur" min="1" max="8" step="0.1" value="3.8"><b id="v-tdur">3.8s</b></div>
+
+  <div id="css-out"></div>
+
+  <div class="lbl">小朋友（可新增、切換造型、調整位置）</div>
+  <div class="sub" style="margin-top:-4px;">「左右」「高低」是佔畫面寬／高的百分比；「大小」是圖片寬度佔畫面寬度的百分比，數字愈大愈靠前／愈大隻。設定會自動保存於此瀏覽器。</div>
+  <div id="kid-list"></div>
+  <button class="act" id="kid-add">➕ 新增小朋友</button>
+
+  <button class="act" id="replay">↻ 重新播放</button>
+  <button class="act" id="reset">回復本車預設值</button>
+  <button class="act" id="choose-settings-file">選擇設定檔位置</button>
+  <button class="act" id="download-settings">下載目前設定檔</button>
+  <div id="save-state" class="warn">參數已自動保存於此瀏覽器。選擇一次檔案位置後，可同步自動覆寫文字檔。</div>
+</div>
+
+<script>
+// 每種列車的到站設定。使用 localStorage 保存各車的微調；未調整時讀取預設值。
+const TRAIN_PROFILES = {
+  slow:      { name:'慢車',   src:'../圖片/玩家icon/蒸氣火車頭（慢車）-去背.png', tw:150, tto:-75, tb:-110, tdur:3.8 },
+  commuter:  { name:'快車',   src:'../圖片/玩家icon/通勤電車（區間車）.png',       tw:150, tto:-75, tb:-110, tdur:3.8 },
+  puyuma:    { name:'普悠瑪', src:'../圖片/玩家icon/普悠瑪（自強號）.png',         tw:150, tto:-75, tb:-110, tdur:3.8 },
+  highspeed: { name:'高鐵',   src:'../圖片/玩家icon/台灣高鐵-去背.png',             tw:150, tto:-75, tb:-110, tdur:3.8 },
+};
+const PROFILE_STORAGE_PREFIX = 'xiaoqiu-cat-railway-arrival-profile-v1:';
+const PROMPT_DELAY = 3650;   // 遊戲：3650ms 後才顯示「按 A 揭曉下一個目的地」
+const NEXT_DELAY   = 500;    // 遊戲：揭曉下一站後 500ms 才顯示「繼續旅程」
+
+const STATIONS = ['基隆','台北','桃園','新竹','台中','嘉義','台南','高雄','花蓮','台東','澎湖','金門'];
+const $ = id => document.getElementById(id);
+const stage = $('dc-stage'), train = $('dc-train'), cheerAudio = $('dc-cheer');
+
+let ready = false, nextShown = false, cur = '', promptTimer = null, doneTimer = null, cheerStopTimer = null, settingsSaveTimer = null;
+let activeTrainId = 'puyuma', replayFrame = null, settingsFileHandle = null;
+
+// ── 車站時鐘：改為即時顯示現在時間 ──────────────────────────────
+// 背景圖裡原本畫死的指針已經由上面 CSS 疊一個新面盤蓋住，這裡只需要每秒算一次
+// 時針／分針角度並轉動即可，不用管背景圖本身。
+const clockHour = $('dc-clock-hour'), clockMin = $('dc-clock-min');
+(function initClockTicks() {
+  // 12,3,6,9 已經用文字疊在面盤上，其餘 8 個小時位置補上刻度，畫法跟遊戲美術一致：
+  // 一根從圓心到邊緣的隱形長條，旋轉到對應角度，只有靠邊緣那一小段用 ::before 畫出來。
+  const clock = $('dc-clock');
+  [1,2,4,5,7,8,10,11].forEach(hour => {
+    const tick = document.createElement('div');
+    tick.className = 'dc-clock-tick';
+    tick.style.transform = `rotate(${hour * 30}deg)`;
+    clock.appendChild(tick);
+  });
+})();
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds();
+  clockHour.style.transform = `rotate(${(h + m / 60) * 30}deg)`;
+  clockMin.style.transform = `rotate(${(m + s / 60) * 6}deg)`;
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ── 小朋友：可新增、切換造型、調整位置（模擬器獨有的擴充功能） ──────────────
+// left／bottom／width 都是「佔整個舞台寬或高的百分比」，不是佔某個小容器的百分比，
+// 所以可以隨意擺到畫面任何位置，不再限制在左下角那一小塊。
+const KID_IMAGES = [
+  '../圖片/慶祝到站小朋友/小朋友01-男孩黃衣.png',
+  '../圖片/慶祝到站小朋友/小朋友02-女孩紅衣.png',
+  '../圖片/慶祝到站小朋友/小朋友03-男孩藍帽.png',
+  '../圖片/慶祝到站小朋友/小朋友04-女孩黃衣.png',
+];
+// 沿用原本 4 位小朋友的跳動節奏；新增的小朋友依序循環套用同一組參數，
+// 節奏還是會錯開，不會看起來像複製貼上。
+const KID_JUMP_PRESETS = [
+  { dur: 1.00, delay: -0.18, height: 15, tilt: -0.7 },
+  { dur: 0.86, delay: -0.51, height: 11, tilt: 0.5 },
+  { dur: 1.13, delay: -0.76, height: 18, tilt: -0.45 },
+  { dur: 0.94, delay: -0.34, height: 13, tilt: 0.65 },
+];
+const KID_STORAGE_KEY = 'xiaoqiu-cat-railway-arrival-kids-v1';
+// 換算自原本 4 位小朋友寫死在 #dc-kids（left:-5%;width:53%）內的相對位置，
+// 換成「佔整個舞台」的絕對百分比，換算後畫面看起來跟舊版一致。
+const DEFAULT_KIDS = [
+  { img: 0, left: -5,  bottom: -5, width: 18 },
+  { img: 1, left: 6,   bottom: -5, width: 18 },
+  { img: 2, left: 18,  bottom: -5, width: 18 },
+  { img: 3, left: 29,  bottom: -5, width: 18 },
+];
+function loadKids() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(KID_STORAGE_KEY));
+    if (Array.isArray(saved) && saved.length) return saved;
+  } catch (_) {}
+  return DEFAULT_KIDS.map(k => ({...k}));
+}
+let kids = loadKids();
+function saveKids() { localStorage.setItem(KID_STORAGE_KEY, JSON.stringify(kids)); }
+
+function renderKids() {
+  const box = $('dc-kids');
+  box.innerHTML = '';
+  kids.forEach((k, i) => {
+    const preset = KID_JUMP_PRESETS[i % KID_JUMP_PRESETS.length];
+    const img = document.createElement('img');
+    img.className = 'dc-kid';
+    img.alt = '歡呼的小朋友';
+    img.src = KID_IMAGES[k.img];
+    img.style.left = k.left + '%';
+    img.style.bottom = k.bottom + '%';
+    img.style.width = k.width + '%';
+    img.style.setProperty('--jump-duration', preset.dur + 's');
+    img.style.setProperty('--jump-delay', preset.delay + 's');
+    img.style.setProperty('--jump-height', preset.height + 'px');
+    img.style.setProperty('--jump-tilt', preset.tilt + 'deg');
+    box.appendChild(img);
+  });
+  renderKidControls();
+}
+function renderKidControls() {
+  const list = $('kid-list');
+  list.innerHTML = '';
+  kids.forEach((k, i) => {
+    const row = document.createElement('div');
+    row.className = 'kid-row';
+    row.innerHTML = `
+      <div class="kid-row-head">
+        <button class="kid-cycle" data-i="${i}" title="點一下切換造型">🧒 造型 ${k.img + 1}</button>
+        <button class="kid-del" data-i="${i}" title="刪除這一位">✕</button>
+      </div>
+      <div class="kid-sliders">
+        <label>左右<input type="range" class="kid-left" data-i="${i}" min="-15" max="90" step="1" value="${k.left}"></label>
+        <label>高低<input type="range" class="kid-bottom" data-i="${i}" min="-15" max="15" step="1" value="${k.bottom}"></label>
+        <label>大小<input type="range" class="kid-width" data-i="${i}" min="8" max="40" step="1" value="${k.width}"></label>
+      </div>`;
+    list.appendChild(row);
+  });
+  const imgAt = i => $('dc-kids').children[i];
+  list.querySelectorAll('.kid-cycle').forEach(b => b.onclick = () => {
+    const i = +b.dataset.i;
+    kids[i].img = (kids[i].img + 1) % KID_IMAGES.length;
+    saveKids(); renderKids();
+  });
+  list.querySelectorAll('.kid-del').forEach(b => b.onclick = () => {
+    const i = +b.dataset.i;
+    kids.splice(i, 1);
+    saveKids(); renderKids();
+  });
+  list.querySelectorAll('.kid-left').forEach(inp => inp.oninput = () => {
+    const i = +inp.dataset.i; kids[i].left = +inp.value; imgAt(i).style.left = inp.value + '%'; saveKids();
+  });
+  list.querySelectorAll('.kid-bottom').forEach(inp => inp.oninput = () => {
+    const i = +inp.dataset.i; kids[i].bottom = +inp.value; imgAt(i).style.bottom = inp.value + '%'; saveKids();
+  });
+  list.querySelectorAll('.kid-width').forEach(inp => inp.oninput = () => {
+    const i = +inp.dataset.i; kids[i].width = +inp.value; imgAt(i).style.width = inp.value + '%'; saveKids();
+  });
+}
+$('kid-add').onclick = () => {
+  const last = kids[kids.length - 1];
+  kids.push({ img: kids.length % KID_IMAGES.length, left: last ? Math.min(85, last.left + 12) : 0, bottom: -5, width: 18 });
+  saveKids(); renderKids();
+};
+renderKids();
+
+const SLIDERS = [
+  {id:'tw',   suffix:'%', css:'--tw'},
+  {id:'tto',  suffix:'%', css:'--tto'},
+  {id:'tb',   suffix:'%', css:'--tb'},
+  {id:'tdur', suffix:'s', css:'--tdur'},
+];
+function readProfile(id) {
+  const fallback = TRAIN_PROFILES[id];
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROFILE_STORAGE_PREFIX + id));
+    if (saved && ['tw','tto','tb','tdur'].every(k => Number.isFinite(Number(saved[k])))) return {...fallback, ...saved};
+  } catch (_) {}
+  return {...fallback};
+}
+function writeProfile() {
+  const profile = {
+    tw:Number($('s-tw').value), tto:Number($('s-tto').value),
+    tb:Number($('s-tb').value), tdur:Number($('s-tdur').value)
+  };
+  localStorage.setItem(PROFILE_STORAGE_PREFIX + activeTrainId, JSON.stringify(profile));
+  scheduleSettingsFileSave();
+  return profile;
+}
+function loadProfile(id) {
+  const profile = readProfile(id);
+  SLIDERS.forEach(s => { $('s-' + s.id).value = profile[s.id]; });
+  train.src = profile.src;
+  applySliders(false);
+}
+function applySliders(save = true) {
+  SLIDERS.forEach(s => {
+    const v = $('s-' + s.id).value;
+    $('v-' + s.id).textContent = v + s.suffix;
+    train.style.setProperty(s.css, v + s.suffix);
+  });
+  // 起始位置固定在停靠位置左邊很遠處，讓列車一定是從畫面外滑進來
+  train.style.setProperty('--tfrom', (Number($('s-tto').value) - 175) + '%');
+  const tw = $('s-tw').value, tto = $('s-tto').value, tb = $('s-tb').value, tdur = $('s-tdur').value;
+  if (save) writeProfile();
+  $('css-out').textContent =
+    `/* ${TRAIN_PROFILES[activeTrainId].name}：已保存，可供遊戲讀取 */\n${JSON.stringify({ id:activeTrainId, width:Number(tw), stopRight:Number(tto), bottom:Number(tb), duration:Number(tdur) }, null, 2)}`;
+}
+
+function settingsText() {
+  const profiles = Object.fromEntries(Object.entries(TRAIN_PROFILES).map(([id, profile]) => {
+    const saved = readProfile(id);
+    return [id, { name:profile.name, image:profile.src, width:Number(saved.tw), stopRight:Number(saved.tto), bottom:Number(saved.tb), duration:Number(saved.tdur) }];
+  }));
+  return `小球貓電鐵｜目的地慶祝動畫模擬設定參數\n更新時間：${new Date().toLocaleString('zh-TW')}\n\n${JSON.stringify(profiles, null, 2)}\n`;
+}
+function setSaveState(message, warn = false) {
+  const state = $('save-state');
+  state.textContent = message;
+  state.classList.toggle('warn', warn);
+}
+async function saveSettingsFile() {
+  if (!settingsFileHandle) return;
+  try {
+    const writable = await settingsFileHandle.createWritable();
+    await writable.write(settingsText());
+    await writable.close();
+    setSaveState('設定已自動寫入「目的地慶祝動畫模擬-設定參數.txt」。');
+  } catch (_) {
+    settingsFileHandle = null;
+    setSaveState('無法再寫入文字檔；參數仍已自動保存在瀏覽器，可改用下載。', true);
+  }
+}
+function scheduleSettingsFileSave() {
+  if (!settingsFileHandle) return;
+  clearTimeout(settingsSaveTimer);
+  settingsSaveTimer = setTimeout(saveSettingsFile, 350);
+}
+async function chooseSettingsFile() {
+  if (!window.showSaveFilePicker) {
+    setSaveState('此瀏覽器不支援自動覆寫檔案；參數已自動保存於瀏覽器，請使用「下載目前設定檔」。', true);
+    return;
+  }
+  try {
+    settingsFileHandle = await window.showSaveFilePicker({
+      suggestedName:'目的地慶祝動畫模擬-設定參數.txt',
+      types:[{ description:'文字檔', accept:{ 'text/plain':['.txt'] } }]
+    });
+    await saveSettingsFile();
+  } catch (_) {
+    setSaveState('尚未選擇設定檔位置；參數仍會自動保存於瀏覽器。', true);
+  }
+}
+function downloadSettings() {
+  const blob = new Blob([settingsText()], {type:'text/plain;charset=utf-8'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = '目的地慶祝動畫模擬-設定參數.txt';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 0);
+  setSaveState('已下載目前設定檔。');
+}
+
+function playCheer() {
+  clearTimeout(cheerStopTimer);
+  cheerAudio.pause();
+  cheerAudio.currentTime = 0;
+  cheerAudio.volume = 0.72;
+  cheerAudio.play().catch(() => {});
+  cheerStopTimer = setTimeout(() => { cheerAudio.pause(); cheerAudio.currentTime = 0; }, PROMPT_DELAY);
+}
+
+function restartTrainAnimation() {
+  if (replayFrame) cancelAnimationFrame(replayFrame);
+  // 先取消 transition 並確實回到起點；下一個畫面幀才開回 transition，避免重播被瀏覽器合併成無動畫。
+  train.style.transition = 'none';
+  train.classList.remove('arrive');
+  void train.offsetWidth;
+  replayFrame = requestAnimationFrame(() => {
+    train.style.transition = '';
+    void train.offsetWidth;
+    replayFrame = requestAnimationFrame(() => { train.classList.add('arrive'); replayFrame = null; });
+  });
+}
+
+function play() {
+  clearTimeout(promptTimer); clearTimeout(doneTimer);
+  ready = false; nextShown = false;
+  cur = STATIONS[Math.floor(Math.random() * STATIONS.length)];
+  $('dc-station-name').textContent = cur;
+  $('dc-arrival-line').textContent = `探險家 搶先抵達！獲得 1億2000萬元`;
+  $('dc-next').classList.remove('show');
+  $('dc-prompt').classList.remove('show');
+  $('dc-continue').classList.remove('show');
+  restartTrainAnimation();
+  playCheer();
+  promptTimer = setTimeout(() => { ready = true; $('dc-prompt').classList.add('show'); }, PROMPT_DELAY);
+}
+
+// 跟遊戲 revealNextDestination() 同一套兩段式流程：第一次 A 揭曉下一站，第二次 A 才結束
+function advance() {
+  if (!ready) return;
+  if (nextShown) { play(); return; }
+  ready = false;
+  const next = STATIONS.filter(s => s !== cur)[Math.floor(Math.random() * (STATIONS.length - 1))];
+  $('dc-prompt').classList.remove('show');
+  $('dc-next-name').textContent = next;
+  $('dc-next').classList.add('show');
+  doneTimer = setTimeout(() => { nextShown = true; ready = true; $('dc-continue').classList.add('show'); }, NEXT_DELAY);
+}
+
+document.querySelectorAll('#trainBtns .tbtn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('#trainBtns .tbtn').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    activeTrainId = btn.dataset.train;
+    loadProfile(activeTrainId);
+    // 點車型按鈕同時切全螢幕（沒進過全螢幕才切，已經在全螢幕就不重複要求）＋重播動畫，
+    // 這樣才能在跟遊戲一樣的實際畫面比例下看效果，不用另外再點一次全螢幕。
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+    play();
+  };
+});
+SLIDERS.forEach(s => { $('s-' + s.id).oninput = applySliders; });
+$('replay').onclick = play;
+$('reset').onclick = () => {
+  const defaults = TRAIN_PROFILES[activeTrainId];
+  SLIDERS.forEach(s => { $('s-' + s.id).value = defaults[s.id]; });
+  localStorage.removeItem(PROFILE_STORAGE_PREFIX + activeTrainId);
+  applySliders(false); play();
+};
+$('choose-settings-file').onclick = chooseSettingsFile;
+$('download-settings').onclick = downloadSettings;
+addEventListener('keydown', e => {
+  if (e.code === 'Space' || (e.key || '').toLowerCase() === 'a') { e.preventDefault(); advance(); }
+});
+
+document.querySelector('#trainBtns .tbtn[data-train="puyuma"]').classList.add('on');
+$('s-fixratio').onchange = () => stage.classList.toggle('fixed-ratio', $('s-fixratio').checked);
+stage.classList.toggle('fixed-ratio', $('s-fixratio').checked);
+loadProfile(activeTrainId);
+if (new URLSearchParams(location.search).get('trailer') === '1') {
+  $('ctl').style.display = 'none';
+  addEventListener('message', event => { if (event.data === 'playArrivalTrailer') play(); });
+} else play();
+</script>
+</body>
+</html>

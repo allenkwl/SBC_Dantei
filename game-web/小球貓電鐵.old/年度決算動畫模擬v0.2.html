@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小球貓電鐵｜年度決算動畫模擬</title>
+<style>
+  :root{--ink:#17354f;--navy:#0c2841;--blue:#2775a7;--sky:#81d8f5;--gold:#ffca46;--pink:#ff6f91;--mint:#72d5b4;--paper:#fffdf5}
+  *{box-sizing:border-box} body{margin:0;min-height:100vh;display:grid;place-items:center;background:#d9f3ff;color:var(--ink);font-family:"PingFang TC","Microsoft JhengHei",sans-serif}
+  #stage{position:relative;width:100vw;height:100vh;overflow:hidden;background:linear-gradient(#72ccf0 0 66%,#d9eff7 66%);box-shadow:0 24px 70px #174e6c66}
+  .skyline{position:absolute;inset:auto 0 0;height:35%;background:linear-gradient(90deg,#80a9bd 0 7%,transparent 7% 10%,#6596ad 10% 17%,transparent 17% 20%,#93b3c1 20% 28%,transparent 28% 32%,#72a3ba 32% 43%,transparent 43% 48%,#82adbd 48% 61%,transparent 61% 66%,#6395ad 66% 75%,transparent 75% 79%,#92b4c0 79% 88%,transparent 88%);opacity:.6}
+  .cloud{position:absolute;width:12%;height:4%;border-radius:99px;background:#fff9;filter:blur(1px);animation:drift 18s linear infinite}.cloud:before,.cloud:after{content:"";position:absolute;border-radius:50%;background:#fff9}.cloud:before{width:42%;height:180%;left:22%;bottom:20%}.cloud:after{width:50%;height:210%;left:46%;bottom:15%}.c1{top:12%;left:-15%}.c2{top:26%;left:46%;scale:.65;animation-delay:-9s}@keyframes drift{to{translate:1300% 0}}
+  .topbar{position:absolute;z-index:8;inset:0 0 auto;height:13%;padding:2.1% 4%;display:flex;align-items:center;justify-content:space-between;color:#fff;background:#102b48e8;box-shadow:0 3px 10px #0b253855}.brand{font-size:clamp(13px,2vw,24px);font-weight:900;letter-spacing:.09em}.season{padding:.4em .9em;border-radius:99px;background:#fff2;color:#fff;font-size:clamp(10px,1.35vw,16px);font-weight:800}
+  .month-card{position:absolute;z-index:3;left:5%;top:22%;width:31%;height:48%;padding:4% 2%;text-align:center;border:5px solid #fff;border-radius:22px;background:#fffdf4e8;box-shadow:0 10px 20px #15445b33}.month-card span{display:block;color:#4a7895;font-weight:900;font-size:clamp(13px,1.7vw,21px);letter-spacing:.2em}.month-card b{display:block;margin-top:5%;font-size:clamp(45px,7vw,85px);line-height:1;color:var(--blue)}.month-card small{display:block;margin-top:7%;font-weight:800;font-size:clamp(11px,1.45vw,17px)}
+  .cat{position:absolute;z-index:5;left:7%;bottom:-4%;width:34%;height:auto;filter:drop-shadow(0 8px 8px #17354f55);animation:bob 1.4s ease-in-out infinite alternate}@keyframes bob{to{translate:0 -10px;rotate:-1deg}}
+  .speech{position:absolute;z-index:6;left:31%;top:26%;width:30%;min-height:20%;padding:2.2%;border:4px solid #fff;border-radius:22px;background:#fffdf8;color:var(--ink);font-weight:900;font-size:clamp(13px,1.7vw,22px);line-height:1.45;box-shadow:0 7px 0 #b4d9e6}.speech:before{content:"";position:absolute;left:-20px;bottom:20px;border:12px solid transparent;border-right-color:#fffdf8}
+  .board{position:absolute;z-index:4;right:4%;top:19%;width:46%;padding:2% 2.4%;border:5px solid #fff3bd;border-radius:20px;background:#174b70eb;box-shadow:0 10px 0 #10375188;color:#fff;opacity:0;transform:translateY(18px);transition:.55s ease}.board.show{opacity:1;transform:none}.board h1{margin:0 0 3%;font-size:clamp(17px,2.35vw,30px);text-align:center;letter-spacing:.08em}.rows{display:grid;gap:8px}.row{display:grid;grid-template-columns:11% 1fr 27% 27%;align-items:center;padding:1.5% 2%;border-radius:10px;background:#fff2;font-size:clamp(10px,1.35vw,17px);font-weight:800;opacity:0;transform:translateX(30px);transition:.4s ease}.row.show{opacity:1;transform:none}.rank{color:#ffe47f;font-size:1.15em}.asset{text-align:right}.change{text-align:right}.up{color:#ffe47f}.down{color:#ffb7c8}.leader{outline:2px solid var(--gold);background:#ffca4633}.crown{margin-right:3px}
+  .annual-title{position:absolute;z-index:10;inset:16% 0 auto;text-align:center;color:#fff;text-shadow:0 4px 0 #16415c,0 8px 18px #16384e99;font-size:clamp(30px,5.2vw,65px);font-weight:900;opacity:0;transform:scale(.75);transition:.45s}.annual-title.show{opacity:1;transform:none}.annual-sub{position:absolute;z-index:10;top:31%;left:0;width:100%;text-align:center;color:#fff;font-size:clamp(13px,2vw,24px);font-weight:800;opacity:0;transition:.4s}.annual-sub.show{opacity:1}
+  .confetti{position:absolute;z-index:11;inset:0;pointer-events:none;opacity:0;transition:.2s}.confetti.on{opacity:1}.confetti i{position:absolute;width:8px;height:15px;left:var(--x);top:-20px;background:var(--c);animation:fall 2.9s linear infinite;animation-delay:var(--d)}@keyframes fall{to{translate:var(--dx) 650px;rotate:620deg}}
+  .key-prompt{position:absolute;z-index:16;bottom:7%;left:50%;transform:translateX(-50%);padding:.7em 1.25em;border:2px solid #fff8c8;border-radius:99px;background:#123a59e8;color:#fff;font-size:clamp(12px,1.55vw,18px);font-weight:900;opacity:0;transition:.3s;white-space:nowrap;animation:pulse 1.1s infinite}.key-prompt.show{opacity:1}@keyframes pulse{50%{transform:translateX(-50%) scale(1.06)}}
+  .chart-page{position:absolute;z-index:30;inset:0;padding:12vh 8vw 8vh;background:linear-gradient(135deg,#123e62ee,#1f7099ed);color:#fff;opacity:0;pointer-events:none;transition:.45s}.chart-page.show{opacity:1;pointer-events:auto}.chart-page h1{margin:0;text-align:center;font-size:clamp(26px,4vw,52px);letter-spacing:.08em}.chart-page p{margin:.55em 0 1.2em;text-align:center;font-size:clamp(13px,1.7vw,20px);font-weight:800;color:#d9f4ff}.chart-wrap{height:58vh;padding:2%;border:3px solid #fff8;border-radius:22px;background:#08294355}.chart-wrap svg{width:100%;height:100%;overflow:visible}.chart-grid{stroke:#fff5;stroke-width:1}.axis-label{fill:#e8f8ff;font-size:14px;font-weight:800}.line-label{font-size:16px;font-weight:900}.chart-page .key-prompt{bottom:4%}
+  #play{position:absolute;z-index:20;right:3%;bottom:4%;border:0;border-radius:99px;padding:.7em 1.2em;background:var(--gold);color:#483508;font:900 clamp(11px,1.4vw,16px) inherit;cursor:pointer;box-shadow:0 4px 0 #bd8b22}#play:active{translate:0 3px;box-shadow:0 1px 0 #bd8b22}.hint{position:absolute;z-index:12;bottom:4%;left:4%;color:#17445e;font-size:clamp(9px,1.1vw,13px);font-weight:800}
+  @media(max-width:560px){#stage{border-radius:0}.speech{left:28%;width:38%;top:24%}.month-card{left:2%;width:29%}.cat{left:1%;width:37%}.board{right:2%;width:48%}.row{grid-template-columns:13% 1fr 25% 30%;gap:2px}.hint{display:none}}
+</style>
+</head>
+<body>
+<main id="stage" aria-label="年度決算新聞動畫模擬">
+  <div class="cloud c1"></div><div class="cloud c2"></div><div class="skyline"></div>
+  <header class="topbar"><span class="brand">🐾 小球貓電鐵・年度財經快報</span><span class="season">三月結算 → 四月開始</span></header>
+  <section class="month-card"><span>年度結算</span><b id="year">第 1 年</b><small>三月已結束，盤點資產中⋯</small></section>
+  <img class="cat" src="../圖片/角色大頭貼/去背/站長-去背.png" alt="站長貓咪主播">
+  <div class="speech" id="speech">各位旅客午安！<br>讓我為大家播報本年度的資產變化！</div>
+  <section class="board" id="board" aria-live="polite"><h1 id="board-title">年度資產排行榜</h1><div class="rows" id="rows"></div></section>
+  <div class="annual-title" id="annual-title">🏆 本年度領先者</div><div class="annual-sub" id="annual-sub"></div>
+  <div class="confetti" id="confetti"></div><div class="key-prompt" id="result-prompt">按 A 或空白鍵，查看歷年資產比較</div>
+  <span class="hint">獨立年度決算動畫模擬 v0.1</span><button id="play">↻ 再播一次</button>
+  <section class="chart-page" id="chart-page"><h1>📈 歷年資產變化</h1><p>四位玩家的每年總資產比較</p><div class="chart-wrap"><svg id="asset-chart" viewBox="0 0 900 430" role="img" aria-label="四位玩家歷年資產變化折線圖"></svg></div><div class="key-prompt show" id="chart-prompt">按 A 或空白鍵，結束年度決算</div></section>
+</main>
+<script>
+  const players=[
+    {name:'探險家',start:1260,end:1890},{name:'旅行家',start:1510,end:1460},{name:'賓士',start:980,end:1740},{name:'站長',start:1330,end:1570}
+  ];
+  const rows=document.getElementById('rows'),board=document.getElementById('board'),speech=document.getElementById('speech'),title=document.getElementById('annual-title'),sub=document.getElementById('annual-sub'),confetti=document.getElementById('confetti'),resultPrompt=document.getElementById('result-prompt'),chartPage=document.getElementById('chart-page');
+  const history=[{name:'探險家',values:[720,980,1260,1890],color:'#ff6f91'},{name:'旅行家',values:[860,1170,1510,1460],color:'#ffd45a'},{name:'賓士',values:[650,790,980,1740],color:'#72d5b4'},{name:'站長',values:[910,1110,1330,1570],color:'#bda0ff'}];
+  let phase='playing', timers=[];
+  const colors=['#ff6f91','#ffd45a','#72d5b4','#8d83e8','#ff9568'];
+  for(let i=0;i<45;i++)confetti.insertAdjacentHTML('beforeend',`<i style="--x:${Math.random()*100}%;--dx:${-150+Math.random()*300}px;--d:${Math.random()*1.7}s;--c:${colors[i%colors.length]}"></i>`);
+  const fmt=n=>`${n.toLocaleString()} 萬元`;
+  function drawChart(){
+    const svg=document.getElementById('asset-chart'),w=900,h=430,left=75,right=75,top=26,bottom=58,min=500,max=2000;
+    const x=i=>left+i*(w-left-right)/3, y=n=>top+(max-n)*(h-top-bottom)/(max-min);
+    let out='';[500,1000,1500,2000].forEach(n=>{out+=`<line class="chart-grid" x1="${left}" y1="${y(n)}" x2="${w-right}" y2="${y(n)}"/><text class="axis-label" x="${left-12}" y="${y(n)+5}" text-anchor="end">${n}</text>`});
+    [1,2,3,4].forEach((n,i)=>out+=`<text class="axis-label" x="${x(i)}" y="${h-20}" text-anchor="middle">第 ${n} 年</text>`);
+    history.forEach((p,j)=>{const pts=p.values.map((n,i)=>`${x(i)},${y(n)}`).join(' ');out+=`<polyline points="${pts}" fill="none" stroke="${p.color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`;p.values.forEach((n,i)=>out+=`<circle cx="${x(i)}" cy="${y(n)}" r="7" fill="${p.color}" stroke="#fff" stroke-width="3"/>`);out+=`<text class="line-label" x="${w-right+12}" y="${y(p.values[3])+5}" fill="${p.color}">${p.name}</text>`});svg.innerHTML=out;
+  }
+  function run(){
+    timers.forEach(clearTimeout);timers=[];phase='playing'; chartPage.classList.remove('show');resultPrompt.classList.remove('show');
+    const result=players.map(p=>({...p,change:p.end-p.start})).sort((a,b)=>b.end-a.end);
+    rows.innerHTML=''; board.classList.remove('show');title.classList.remove('show');sub.classList.remove('show');confetti.classList.remove('on');
+    speech.innerHTML='三月結束囉！<br>現在開始盤點每位玩家的年度資產⋯';
+    timers.push(setTimeout(()=>{speech.innerHTML='本年度資產變化如下，<br>一起看看誰的投資最有收穫！';board.classList.add('show');result.forEach((p,i)=>{const row=document.createElement('div');row.className=`row ${i===0?'leader':''}`;row.innerHTML=`<span class="rank">${i===0?'👑':'#'+(i+1)}</span><span>${p.name}</span><span class="asset">${fmt(p.end)}</span><span class="change ${p.change>=0?'up':'down'}">${p.change>=0?'▲':'▼'} ${fmt(Math.abs(p.change))}</span>`;rows.appendChild(row);timers.push(setTimeout(()=>row.classList.add('show'),i*470+160));});},900));
+    timers.push(setTimeout(()=>{const winner=result[0];speech.innerHTML=`年度決算完成！<br><b>${winner.name}</b> 目前排名第一名！`;title.classList.add('show');sub.textContent=`${winner.name}以 ${fmt(winner.end)} 暫居第一名`;sub.classList.add('show');confetti.classList.add('on');resultPrompt.classList.add('show');phase='result';},3500));
+  }
+  addEventListener('keydown',e=>{if(e.code!=='Space'&&e.key!=='a'&&e.key!=='A')return;e.preventDefault();if(phase==='result'){drawChart();chartPage.classList.add('show');resultPrompt.classList.remove('show');phase='chart';}else if(phase==='chart'){chartPage.classList.remove('show');phase='ended';speech.innerHTML='年度決算已完成！<br>四月的旅程，現在開始！';}});
+  document.getElementById('play').onclick=run;run();
+</script>
+</body></html>

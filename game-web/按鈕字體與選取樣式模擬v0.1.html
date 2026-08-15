@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>按鈕字體與選取樣式模擬 v0.1</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  :root {
+    --navy: #0C1A28; --panel: #172B40cc; --rim: #254663;
+    --amber: #F0A020; --text: #D4E6F4; --lo: #5E84A4;
+    --ui: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  }
+  html, body { background:var(--navy); color:var(--text); font-family:var(--ui); min-height:100%; }
+  body { padding:24px 20px 80px; max-width:920px; margin:0 auto; }
+  h1 { color:var(--amber); font-size:20px; margin-bottom:6px; }
+  .sub { color:var(--lo); font-size:13px; margin-bottom:24px; }
+  .toggle-bar { position:sticky; top:0; z-index:50; background:var(--navy); padding:10px 0 16px; border-bottom:1px solid var(--rim); margin-bottom:28px; display:flex; align-items:center; gap:12px; }
+  #toggle-btn {
+    height:40px; padding:0 20px; font-size:14px; font-weight:800; font-family:var(--ui);
+    background:linear-gradient(#ffc43e,#dc7700); color:#fff; text-shadow:0 2px 2px rgba(0,0,0,.5);
+    border:2px solid #ffe27d; border-radius:20px; cursor:pointer;
+    box-shadow:0 4px 0 #a85400,0 8px 14px rgba(0,0,0,.3);
+  }
+  #toggle-btn:active { transform:translateY(3px); box-shadow:0 1px 0 #a85400; }
+  .toggle-label { font-size:13px; color:var(--text); }
+  section { margin-bottom:44px; }
+  section h2 { font-size:15px; color:var(--text); margin-bottom:4px; display:flex; align-items:center; gap:8px; }
+  section .note { font-size:12px; color:var(--lo); margin-bottom:14px; line-height:1.6; }
+  .stage {
+    background:#0f2133; border:1px solid var(--rim); border-radius:14px; padding:26px;
+    display:flex; flex-wrap:wrap; align-items:center; gap:20px;
+  }
+  .size-tag { font-size:11px; color:#FFD54A; background:rgba(255,213,74,.12); border:1px solid rgba(255,213,74,.35); border-radius:6px; padding:2px 7px; font-weight:700; }
+
+  /* ── 1. 控制列按鈕 ── */
+  #controls-demo { display:flex; align-items:center; gap:12px; }
+  .cbtn { border:2px solid rgba(255,255,255,.72); cursor:default; font-family:var(--ui); color:#fff; text-shadow:0 2px 2px rgba(0,0,0,.62); font-weight:800; }
+  .cbtn.roll { height:52px; padding:0 30px; background:linear-gradient(#fffdf5,#d7c19d); border-radius:26px; box-shadow:0 5px 0 #8d795e,0 10px 18px rgba(0,0,0,.38),inset 0 2px 0 #fff; color:#20150a; text-shadow:none; }
+  .cbtn.cards { height:52px; padding:0 22px; background:linear-gradient(#ffc43e,#dc7700); border-radius:26px; box-shadow:0 5px 0 #a85400,0 10px 18px rgba(0,0,0,.38),inset 0 2px 0 rgba(255,255,255,.55); }
+  .cbtn.zoom { height:44px; padding:0 16px; background:linear-gradient(#426b80,#183342); border-radius:22px; box-shadow:0 5px 0 #0b1e29,0 10px 18px rgba(0,0,0,.38),inset 0 2px 0 rgba(255,255,255,.2); }
+  .cbtn.reach { height:52px; padding:0 18px; background:linear-gradient(#2de0f5,#008ca5); border:3px solid #fff; border-radius:26px; box-shadow:0 5px 0 #07687a,0 0 0 4px rgba(0,217,255,.24); }
+  .old .cbtn { font-size:22px; }
+  .new .cbtn { font-size:14px; }
+
+  /* ── 2. 選人數畫面 ── */
+  .n-row { display:flex; gap:14px; }
+  .n-btn-demo {
+    width:96px; height:96px; line-height:1.2; font-weight:800; font-family:var(--ui);
+    background:linear-gradient(#355f77,#1b374b); color:#fff; text-shadow:0 3px 3px rgba(0,0,0,.62);
+    border:3px solid #5fa1c2; border-radius:14px; cursor:default;
+    box-shadow:0 7px 0 #0c2639,0 13px 20px rgba(0,0,0,.34),inset 0 2px 0 rgba(255,255,255,.18);
+    display:flex; align-items:center; justify-content:center; text-align:center;
+  }
+  .n-btn-demo.kb-selected {
+    border-color:#fff2b7; background:linear-gradient(#ffd560,#f4a51b);
+    box-shadow:0 7px 0 #a55a00,0 0 0 5px rgba(255,208,75,.25),0 15px 22px rgba(0,0,0,.34),inset 0 2px 0 rgba(255,255,255,.55);
+    color:#3a2400; text-shadow:none;
+  }
+  .load-save-demo {
+    margin-top:8px; height:40px; padding:0 20px; font-weight:800; font-family:var(--ui);
+    background:linear-gradient(#355f77,#1b374b); color:#fff; text-shadow:0 3px 3px rgba(0,0,0,.62);
+    border:3px solid #5fa1c2; border-radius:20px; cursor:default;
+    box-shadow:0 6px 0 #0c2639,0 10px 16px rgba(0,0,0,.3),inset 0 2px 0 rgba(255,255,255,.18);
+  }
+  .old .n-btn-demo, .old .load-save-demo { font-size:20px; }
+  .new .n-btn-demo, .new .load-save-demo { font-size:14px; }
+  .n-col { display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+
+  /* ── 3. 讀取存檔列表 ── */
+  .slot-list { display:flex; flex-direction:column; gap:8px; width:340px; }
+  .save-slot-demo {
+    display:flex; flex-direction:column; align-items:flex-start; gap:2px;
+    width:100%; padding:9px 12px; border-radius:8px; cursor:default; text-align:left;
+    background:#1C3450; border:1.5px solid var(--rim); color:var(--text); font-family:var(--ui);
+  }
+  .save-slot-demo .num { font-size:11px; color:var(--lo); font-weight:700; }
+  .save-slot-demo .names { font-size:13.5px; font-weight:700; }
+  .save-slot-demo .meta { font-size:11.5px; color:var(--lo); }
+  /* 提案：跟 .n-btn.kb-selected 同一套視覺（金色漸層＋厚邊框＋立體陰影），方向鍵選到哪一格就整格變成這樣 */
+  .save-slot-demo.kb-selected {
+    border-color:#fff2b7; background:linear-gradient(#ffd560,#f4a51b);
+    box-shadow:0 4px 0 #a55a00,0 0 0 4px rgba(255,208,75,.25),0 8px 14px rgba(0,0,0,.3),inset 0 2px 0 rgba(255,255,255,.5);
+    color:#3a2400;
+  }
+  .save-slot-demo.kb-selected .num, .save-slot-demo.kb-selected .meta { color:#6b4700; }
+
+  /* ── 4. 存檔詳細頁按鈕 ── */
+  .sd-actions-demo { display:flex; flex-direction:column; gap:6px; width:260px; }
+  .sd-btn { font-weight:800; font-family:var(--ui); cursor:default; border-radius:20px; }
+  .sd-load-demo { height:42px; background:linear-gradient(#ffc43e,#dc7700); color:#fff; text-shadow:0 3px 3px rgba(0,0,0,.62); border:2px solid #ffe27d; box-shadow:0 6px 0 #a85400,0 10px 16px rgba(0,0,0,.3),inset 0 2px 0 rgba(255,255,255,.55); }
+  .sd-delete-demo { height:38px; background:linear-gradient(#355f77,#1b374b); color:#ff7373; text-shadow:0 3px 3px rgba(45,0,0,.7); border:3px solid #5fa1c2; box-shadow:0 6px 0 #0c2639,0 10px 16px rgba(0,0,0,.3),inset 0 2px 0 rgba(255,255,255,.18); }
+  .sd-back-demo { height:40px; background:linear-gradient(#355f77,#1b374b); color:#fff; text-shadow:0 3px 3px rgba(0,0,0,.62); border:3px solid #5fa1c2; border-radius:20px; box-shadow:0 6px 0 #0c2639,0 10px 16px rgba(0,0,0,.3),inset 0 2px 0 rgba(255,255,255,.18); }
+  .old .sd-btn { font-size:16px; }
+  .new .sd-btn { font-size:13px; }
+  /* 提案：這三顆目前是靠瀏覽器原生 :focus-visible（細細一圈外框），改成跟上面兩區一樣的金色立體樣式 */
+  .sd-btn.kb-selected {
+    border-color:#fff2b7 !important; background:linear-gradient(#ffd560,#f4a51b) !important;
+    color:#3a2400 !important; text-shadow:none !important;
+    box-shadow:0 4px 0 #a55a00,0 0 0 4px rgba(255,208,75,.25),0 8px 14px rgba(0,0,0,.3),inset 0 2px 0 rgba(255,255,255,.55) !important;
+  }
+
+  .old, .new { display:none; }
+  body.show-old .old { display:block; }
+  body.show-new .new { display:block; }
+  .stage > .old, .stage > .new { width:100%; }
+</style>
+</head>
+<body class="show-new">
+
+<div class="toggle-bar">
+  <button id="toggle-btn">目前顯示：修改後（小字＋統一黃色選取）</button>
+  <span class="toggle-label">點一下切換「修改前 / 修改後」比較</span>
+</div>
+
+<h1>按鈕字體縮小 ＋ 鍵盤選取統一黃色樣式（模擬）</h1>
+<p class="sub">這是純視覺模擬，還沒改到遊戲檔案。下面四個區塊分別對應你截圖裡提到的位置，可以切換「修改前/修改後」比較大小跟顏色。</p>
+
+<section>
+  <h2>1. 畫面左下角控制列（擲骰／可到達／卡片／全島近景）</h2>
+  <p class="note">目前字級是 22px（被 !important 強制放大），改成 14px。</p>
+  <div class="stage">
+    <div class="old" id="controls-demo-old">
+      <span class="size-tag">22px（目前）</span>
+      <div id="controls-demo" style="margin-top:10px;">
+        <button class="cbtn roll">🎲 探險家 擲骰</button>
+        <button class="cbtn reach">Y　可到達</button>
+        <button class="cbtn cards">🃏 卡片 7</button>
+        <button class="cbtn zoom">🔍 全島／近景</button>
+      </div>
+    </div>
+    <div class="new" id="controls-demo-new">
+      <span class="size-tag">14px（提案）</span>
+      <div style="margin-top:10px; display:flex; align-items:center; gap:12px;">
+        <button class="cbtn roll" style="font-size:14px;">🎲 探險家 擲骰</button>
+        <button class="cbtn reach" style="font-size:14px;">Y　可到達</button>
+        <button class="cbtn cards" style="font-size:14px;">🃏 卡片 7</button>
+        <button class="cbtn zoom" style="font-size:14px;">🔍 全島／近景</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>2. 選人數畫面（2/3/4 人對戰、讀取存檔）</h2>
+  <p class="note">字級從 20px 改成 14px；這區的黃色選取樣式已經是你喜歡的效果，維持不變，只是拿來當其他區塊的統一範本。</p>
+  <div class="stage">
+    <div class="old"><div class="n-col">
+      <span class="size-tag">20px（目前）</span>
+      <div class="n-row" style="margin-top:10px;">
+        <div class="n-btn-demo kb-selected">2 人<br>對戰</div>
+        <div class="n-btn-demo">3 人<br>對戰</div>
+        <div class="n-btn-demo">4 人<br>對戰</div>
+      </div>
+      <div class="load-save-demo">📂 讀取存檔</div>
+    </div></div>
+    <div class="new"><div class="n-col">
+      <span class="size-tag">14px（提案）</span>
+      <div class="n-row" style="margin-top:10px;">
+        <div class="n-btn-demo kb-selected">2 人<br>對戰</div>
+        <div class="n-btn-demo">3 人<br>對戰</div>
+        <div class="n-btn-demo">4 人<br>對戰</div>
+      </div>
+      <div class="load-save-demo">📂 讀取存檔</div>
+    </div></div>
+  </div>
+</section>
+
+<section>
+  <h2>3. 讀取存檔列表（目前完全沒有鍵盤選取樣式）</h2>
+  <p class="note">提案：跟第 2 區同一套金色漸層＋立體陰影樣式，方向鍵選到哪一格，那一格就整格變黃，不再只是滑鼠 hover 邊框變色而已。</p>
+  <div class="stage">
+    <div class="old"><div class="slot-list">
+      <span class="size-tag">目前：沒有鍵盤選取效果</span>
+      <div class="save-slot-demo" style="margin-top:6px;">
+        <span class="num">檔案 1</span><span class="names">探險家、賓士</span><span class="meta">2 人・第 2／5 年</span>
+      </div>
+      <div class="save-slot-demo"><span class="num">檔案 2</span><span class="names" style="font-style:italic;color:var(--lo);font-weight:400;">空的存檔</span></div>
+      <div class="save-slot-demo"><span class="num">檔案 3</span><span class="names" style="font-style:italic;color:var(--lo);font-weight:400;">空的存檔</span></div>
+    </div></div>
+    <div class="new"><div class="slot-list">
+      <span class="size-tag">提案：金色選取（跟第 2 區同款）</span>
+      <div class="save-slot-demo kb-selected" style="margin-top:6px;">
+        <span class="num">檔案 1</span><span class="names">探險家、賓士</span><span class="meta">2 人・第 2／5 年</span>
+      </div>
+      <div class="save-slot-demo"><span class="num">檔案 2</span><span class="names" style="font-style:italic;color:var(--lo);font-weight:400;">空的存檔</span></div>
+      <div class="save-slot-demo"><span class="num">檔案 3</span><span class="names" style="font-style:italic;color:var(--lo);font-weight:400;">空的存檔</span></div>
+    </div></div>
+  </div>
+</section>
+
+<section>
+  <h2>4. 存檔詳細頁（讀取這個存檔／刪除存檔／返回列表）</h2>
+  <p class="note">字級從 16px 改成 13px；鍵盤選取目前是細細一圈白框（瀏覽器預設focus樣式），提案改成跟上面兩區同一套金色樣式。</p>
+  <div class="stage">
+    <div class="old"><div class="sd-actions-demo">
+      <span class="size-tag">16px＋原本的細框選取</span>
+      <button class="sd-btn sd-load-demo" style="margin-top:6px; outline:4px solid #FFD54A; outline-offset:3px;">讀取這個存檔</button>
+      <button class="sd-btn sd-delete-demo">刪除存檔</button>
+      <button class="sd-btn sd-back-demo">返回列表</button>
+    </div></div>
+    <div class="new"><div class="sd-actions-demo">
+      <span class="size-tag">13px＋金色選取（提案）</span>
+      <button class="sd-btn sd-load-demo kb-selected" style="margin-top:6px;">讀取這個存檔</button>
+      <button class="sd-btn sd-delete-demo">刪除存檔</button>
+      <button class="sd-btn sd-back-demo">返回列表</button>
+    </div></div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const btn = document.getElementById('toggle-btn');
+  btn.onclick = () => {
+    const showingNew = document.body.classList.contains('show-new');
+    document.body.classList.toggle('show-new', !showingNew);
+    document.body.classList.toggle('show-old', showingNew);
+    btn.textContent = showingNew ? '目前顯示：修改前（原本大小＋樣式）' : '目前顯示：修改後（小字＋統一黃色選取）';
+  };
+</script>
+</body>
+</html>

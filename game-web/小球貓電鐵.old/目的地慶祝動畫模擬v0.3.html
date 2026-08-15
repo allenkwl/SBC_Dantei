@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小球貓電鐵｜目的地到站動畫模擬</title>
+<style>
+  :root { --ink:#17354f; --sky:#86d9f5; --sun:#ffd85a; --pink:#ff6f91; --mint:#72d5b4; --navy:#102a43; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; overflow:hidden; background:#dff5ff; color:var(--ink); font-family:"PingFang TC","Microsoft JhengHei",sans-serif; }
+  #stage { position:relative; width:min(100vw,980px); aspect-ratio:3/2; overflow:hidden; border-radius:20px; background:#d8ebf4 url('../圖片/車站月台.png') center/cover no-repeat; box-shadow:0 24px 70px #174e6c55; }
+  .cloud { position:absolute; width:94px; height:25px; background:#fff9; border-radius:50px; filter:blur(.2px); animation:drift 16s linear infinite; }
+  .cloud:before,.cloud:after { content:""; position:absolute; background:#fff9; border-radius:50%; } .cloud:before{width:35px;height:35px;left:17px;bottom:5px}.cloud:after{width:46px;height:46px;left:43px;bottom:4px}
+  .c1 { top:10%; left:-10%; } .c2 { top:19%; left:55%; transform:scale(.7); animation-delay:-7s; } @keyframes drift { to{translate:1100px 0} }
+  .hills { position:absolute; bottom:37%; width:125%; height:26%; background:#79c889; border-radius:50% 50% 0 0 / 100% 100% 0 0; left:-12%; }
+  .station { position:absolute; top:34%; left:50%; width:340px; height:0; transform:translateX(-50%); }
+  .station-roof,.station-wall,.window,.platform,.track,.cloud,.hills { display:none; }
+  .station-sign { position:absolute; z-index:5; top:0; left:50%; transform:translateX(-50%); min-width:190px; padding:10px 18px; text-align:center; font-size:clamp(20px,3vw,34px); font-weight:900; letter-spacing:.12em; color:#fff; background:#2775a7; border:5px solid #fff; border-radius:10px; box-shadow:0 5px #155377; }
+  /* 透明底的普悠瑪圖保留原始比例；列車從右側外緩緩駛進，停靠位置依示意圖裁切於右下。 */
+  .cat-train { position:absolute; z-index:9; width:150%; height:auto; right:-250%; bottom:-100%; transition:right 3.8s cubic-bezier(.14,.77,.22,1); }
+  .cat-train.arrive { right:-95%; }
+  .engine { position:absolute; inset:12px 0 0 0; background:linear-gradient(90deg,#f77e4e 0 18%,#f6c34c 18% 100%); border:6px solid #984b38; border-radius:29px 24px 16px 16px; box-shadow:inset 0 -13px #e59a38,0 7px 0 #753f36; }
+  .ear { position:absolute; width:38px; height:45px; top:-22px; background:#f6c34c; border:6px solid #984b38; border-bottom:0; transform:skew(-14deg); } .ear.a{left:54px}.ear.b{left:107px;transform:skew(14deg)}
+  .face { position:absolute; left:25px; top:27px; width:76px; height:60px; z-index:2; background:#ffe2b6; border:5px solid #984b38; border-radius:50%; } .face:before{content:"•  •";position:absolute;left:13px;top:4px;font-size:25px}.face:after{content:"⌣";position:absolute;left:31px;top:23px;font-size:29px}
+  .train-window { position:absolute; z-index:2; width:41px; height:40px; top:29px; background:#8cdbef; border:5px solid #984b38; border-radius:9px; } .tw1{left:128px}.tw2{left:180px}.tw3{left:232px}
+  .wheel { position:absolute; z-index:3; bottom:-10px; width:30px; height:30px; border-radius:50%; background:#3e4b55; border:5px solid #202c36; } .wh1{left:55px}.wh2{left:210px}
+  .people { position:absolute; z-index:8; bottom:18%; left:5%; width:31%; height:120px; pointer-events:none; }
+  .person { position:absolute; bottom:0; width:35px; height:72px; animation:cheer 1.05s ease-in-out infinite alternate; animation-delay:var(--d); }
+  .head { position:absolute; left:8px; width:21px; height:21px; border-radius:50%; background:var(--skin); border:2px solid #704834; }.body{position:absolute;left:4px;top:20px;width:28px;height:35px;border-radius:12px 12px 4px 4px;background:var(--shirt)}.arm{position:absolute;top:26px;width:25px;height:7px;background:var(--shirt);border-radius:7px;transform-origin:left center}.arm.l{left:2px;transform:rotate(-55deg)}.arm.r{right:1px;transform:rotate(55deg);transform-origin:right center}.leg{position:absolute;bottom:0;width:9px;height:19px;background:#344b68;border-radius:0 0 6px 6px}.leg.l{left:9px}.leg.r{right:8px}
+  .p1{left:3%;transform:scale(1.12);--shirt:#ff6f91;--skin:#f1b085;--d:.1s}.p2{left:22%;transform:scale(.9);--shirt:#54b9df;--skin:#df9c71;--d:.5s}.p3{left:43%;transform:scale(.72);--shirt:#ffd15c;--skin:#f4c19b;--d:.2s}.p4{left:62%;transform:scale(.58);--shirt:#8dd57a;--skin:#c98560;--d:.7s}.p5{left:77%;transform:scale(.46);--shirt:#b790e9;--skin:#edb68f;--d:.3s}
+  @keyframes cheer { to { translate:0 -8px; } }
+  .confetti { position:absolute; z-index:20; inset:0; pointer-events:none; opacity:0; } .confetti.on{opacity:1}.confetti i{position:absolute;width:9px;height:17px;background:var(--c);top:-20px;left:var(--x);animation:fall 2.6s linear infinite;animation-delay:var(--d);transform:rotate(20deg)}@keyframes fall{to{translate:var(--dx) 600px;rotate:500deg}}
+  .arrival-card,.next-card { position:absolute; z-index:30; left:50%; translate:-50% 0; text-align:center; color:#fff; text-shadow:0 3px 0 #16415c,0 5px 13px #16384e88; opacity:0; transition:.45s ease; }
+  .arrival-card { top:7%; } .arrival-card.show,.next-card.show { opacity:1; } .arrival-card h1 { margin:0; font-size:clamp(28px,5vw,52px); } .arrival-card p { margin:6px 0; font-weight:900; font-size:clamp(15px,2vw,22px); }
+  .prompt { position:absolute; z-index:35; bottom:5%; left:50%; translate:-50% 0; padding:10px 18px; background:#123a59e8; color:#fff; border:2px solid #fff8c8; border-radius:22px; font-weight:700; animation:pulse 1.1s infinite; opacity:0; transition:.3s; white-space:nowrap; }.prompt.show{opacity:1}@keyframes pulse{50%{scale:1.06}}
+  .next-card { top:18%; width:min(86%,500px); padding:23px 30px; border:4px solid #fff6bd; border-radius:18px; background:linear-gradient(135deg,#265f8e,#163d64); box-shadow:0 12px 30px #102c4088; transform:scale(.75); }.next-card.show{transform:scale(1)}.next-card small{display:block;color:#ffe68a;font-weight:800;letter-spacing:.12em}.next-card b{display:block;margin-top:7px;font-size:clamp(31px,6vw,58px)}
+  #replay { position:absolute; z-index:50; top:16px; right:16px; border:0; border-radius:18px; padding:8px 14px; font:700 13px inherit; color:#17354f; background:#fff8; cursor:pointer; } #replay:hover{background:#fff}
+  .hint { position:absolute; z-index:50; bottom:10px; right:15px; color:#17445e; font-size:11px; font-weight:700; opacity:.8; }
+</style>
+</head>
+<body>
+<main id="stage" aria-label="目的地到站動畫模擬">
+  <div class="cloud c1"></div><div class="cloud c2"></div><div class="hills"></div>
+  <div class="station"><div class="station-roof"></div><div class="station-wall"></div><div class="window w1"></div><div class="window w2"></div><div class="station-sign" id="station-name">花蓮</div></div>
+  <div class="track"></div><div class="platform"></div>
+  <div class="people" id="people"></div>
+  <img class="cat-train" id="train" src="../玩家icon/普悠瑪.png" alt="普悠瑪列車">
+  <div class="confetti" id="confetti"></div>
+  <section class="arrival-card" id="arrival"><h1>🎉 抵達目的地！</h1><p id="arrival-line">探險家搶先抵達 花蓮</p></section>
+  <div class="prompt" id="prompt">按 A 或空白鍵，揭曉下一個目的地</div>
+  <section class="next-card" id="next"><small>下一個目的地</small><b id="next-name">台南</b></section>
+  <button id="replay">↻ 重新播放</button><span class="hint">獨立動畫原型 v0.3</span>
+</main>
+<script>
+  const stations=['基隆','台北','桃園','新竹','台中','嘉義','台南','高雄','花蓮','台東','澎湖','金門'];
+  const people=document.getElementById('people');
+  for(let i=1;i<=5;i++) people.insertAdjacentHTML('beforeend',`<div class="person p${i}"><i class="head"></i><i class="body"></i><i class="arm l"></i><i class="arm r"></i><i class="leg l"></i><i class="leg r"></i></div>`);
+  const confetti=document.getElementById('confetti');
+  const colors=['#ff6f91','#ffd45a','#72d5b4','#8d83e8','#ff9568'];
+  for(let i=0;i<46;i++) confetti.insertAdjacentHTML('beforeend',`<i style="--x:${Math.random()*100}%;--dx:${-120+Math.random()*240}px;--d:${Math.random()*1.5}s;--c:${colors[i%colors.length]}"></i>`);
+  let current='花蓮', locked=false;
+  function play(){
+    locked=false; current=stations[Math.floor(Math.random()*stations.length)];
+    document.getElementById('station-name').textContent=current;
+    document.getElementById('arrival-line').textContent=`探險家搶先抵達 ${current}`;
+    ['arrival','prompt','next'].forEach(id=>document.getElementById(id).classList.remove('show'));
+    confetti.classList.remove('on'); const train=document.getElementById('train'); train.classList.remove('arrive');
+    requestAnimationFrame(()=>requestAnimationFrame(()=>train.classList.add('arrive')));
+    setTimeout(()=>{ document.getElementById('arrival').classList.add('show'); confetti.classList.add('on'); },2800);
+    setTimeout(()=>document.getElementById('prompt').classList.add('show'),3600);
+  }
+  function reveal(){ if(locked || !document.getElementById('prompt').classList.contains('show')) return; locked=true; const next=stations.filter(s=>s!==current)[Math.floor(Math.random()*(stations.length-1))]; document.getElementById('prompt').classList.remove('show'); document.getElementById('next-name').textContent=next; document.getElementById('next').classList.add('show'); }
+  addEventListener('keydown',e=>{if(e.code==='Space'||e.key.toLowerCase()==='a'){e.preventDefault();reveal();}});
+  document.getElementById('replay').onclick=play; play();
+</script>
+</body></html>

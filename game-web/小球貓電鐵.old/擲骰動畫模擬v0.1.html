@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小球貓電鐵｜立體擲骰動畫模擬 v0.1</title>
+<style>
+  *{box-sizing:border-box} body{margin:0;min-height:100vh;overflow:hidden;background:#102a42;color:#fff;font-family:"Noto Sans TC",system-ui,sans-serif}
+  #stage{position:relative;min-height:100vh;display:grid;place-items:center;isolation:isolate;background:radial-gradient(ellipse at 50% 42%,#477895 0 20%,#1c4763 48%,#0b1c2c 100%)}
+  #stage::before{content:"";position:absolute;inset:8vh 7vw 16vh;border:10px solid #d6a747;border-radius:45% 45% 40% 40%;background:radial-gradient(ellipse at 50% 38%,#426f8d,#183d58 72%);box-shadow:inset 0 0 0 7px #8c5e24,0 24px 45px #0008;transform:perspective(900px) rotateX(9deg);z-index:-1}
+  header{position:absolute;top:4vh;text-align:center;text-shadow:0 4px 0 #12304b,0 7px 18px #0008}h1{margin:0;font-size:clamp(26px,4vw,52px);letter-spacing:.08em}.sub{margin:9px 0 0;color:#d8efff;font-weight:700}
+  #dice-zone{position:absolute;inset:17vh 10vw 17vh;pointer-events:none}.die{position:absolute;width:min(27vw,310px);aspect-ratio:485/540;background-image:url('../圖片/骰子/骰子六面圖v0.1.png');background-size:300% 200%;background-repeat:no-repeat;filter:drop-shadow(0 13px 7px #0019);opacity:0;transform:translate(-50%,-50%) scale(.4) rotate(0deg)}
+  .face-1{background-position:0% 0%}.face-2{background-position:50% 0%}.face-3{background-position:100% 0%}.face-4{background-position:0% 100%}.face-5{background-position:50% 100%}.face-6{background-position:100% 100%}
+  .die.throw{animation:throw .82s cubic-bezier(.17,.82,.23,1) forwards}.die:nth-child(2).throw{animation-name:throw2}.die:nth-child(3).throw{animation-name:throw3}.die:nth-child(4).throw{animation-name:throw4}.die:nth-child(5).throw{animation-name:throw5}
+  @keyframes throw{0%{opacity:0;transform:translate(-112%,-180%) scale(.25) rotate(-220deg)}12%{opacity:1}55%{transform:translate(-8%,-74%) scale(1.2) rotate(215deg)}78%{transform:translate(4%,-45%) scale(.96) rotate(342deg)}100%{opacity:1;transform:translate(0,-50%) scale(1) rotate(360deg)}}
+  @keyframes throw2{0%{opacity:0;transform:translate(50%,-200%) scale(.2) rotate(180deg)}50%{transform:translate(16%,-91%) scale(1.18) rotate(-155deg)}80%{transform:translate(-5%,-48%) scale(.93) rotate(-300deg)}100%{opacity:1;transform:translate(0,-50%) scale(1) rotate(-360deg)}}
+  @keyframes throw3{0%{opacity:0;transform:translate(-220%,-65%) scale(.2) rotate(-100deg)}52%{transform:translate(-24%,-54%) scale(1.14) rotate(240deg)}78%{transform:translate(6%,-47%) scale(.94) rotate(335deg)}100%{opacity:1;transform:translate(0,-50%) scale(1) rotate(360deg)}}
+  @keyframes throw4{0%{opacity:0;transform:translate(130%,-90%) scale(.22) rotate(110deg)}53%{transform:translate(15%,-64%) scale(1.12) rotate(-210deg)}80%{transform:translate(-4%,-45%) scale(.95) rotate(-345deg)}100%{opacity:1;transform:translate(0,-50%) scale(1) rotate(-360deg)}}
+  @keyframes throw5{0%{opacity:0;transform:translate(-35%,-230%) scale(.18) rotate(-260deg)}52%{transform:translate(-13%,-82%) scale(1.05) rotate(220deg)}78%{transform:translate(4%,-48%) scale(.94) rotate(350deg)}100%{opacity:1;transform:translate(0,-50%) scale(1) rotate(360deg)}}
+  #result{position:absolute;bottom:13vh;left:50%;transform:translateX(-50%);min-width:260px;padding:12px 28px;border:3px solid #fff3bb;border-radius:25px;background:#153e5add;text-align:center;font-size:clamp(18px,2.4vw,28px);font-weight:900;opacity:0;transition:opacity .18s;box-shadow:0 5px 0 #0a2032}.show{opacity:1!important}
+  button{position:absolute;z-index:5;bottom:4vh;left:50%;transform:translateX(-50%);border:0;border-radius:28px;padding:15px 32px;background:linear-gradient(#fff9e9,#e9d2a0);color:#1a3145;font:900 clamp(16px,2vw,23px) inherit;cursor:pointer;box-shadow:0 5px 0 #a77c3b,0 10px 24px #0007}button:active{transform:translateX(-50%) translateY(4px);box-shadow:0 1px 0 #a77c3b,0 5px 12px #0007}.hint{position:absolute;right:18px;bottom:15px;color:#d1e6f4;font-size:13px;font-weight:700}
+  @media(max-width:650px){#stage::before{inset:14vh 2vw 19vh;border-width:6px}.die{width:45vw}#dice-zone{inset:19vh 3vw 20vh}.hint{display:none}}
+</style>
+</head>
+<body>
+<main id="stage">
+  <header><h1>🎲 立體擲骰</h1><p class="sub">六面骰子飛出、翻滾、落地</p></header>
+  <section id="dice-zone" aria-label="骰子動畫"></section>
+  <div id="result" aria-live="polite"></div>
+  <button id="roll">🎲 擲骰看看</button><span class="hint">空白鍵也可以擲骰</span>
+</main>
+<script>
+const faces=[1,2,3,4,5,6], zone=document.querySelector('#dice-zone'), result=document.querySelector('#result'), button=document.querySelector('#roll');
+let busy=false;
+function roll(){if(busy)return;busy=true;result.classList.remove('show');zone.replaceChildren();const count=[1,2,5][Math.floor(Math.random()*3)], values=[];
+  const spots=count===1?[[50,54]]:count===2?[[35,54],[65,54]]:[[19,55],[35,39],[50,58],[65,39],[81,55]];
+  for(let i=0;i<count;i++){const value=faces[Math.floor(Math.random()*faces.length)],die=document.createElement('i');die.className=`die face-${value}`;die.style.left=spots[i][0]+'%';die.style.top=spots[i][1]+'%';zone.append(die);requestAnimationFrame(()=>die.classList.add('throw'));values.push(value)}
+  setTimeout(()=>{result.textContent=`骰出 ${values.join(' ＋ ')} ＝ ${values.reduce((a,b)=>a+b,0)} 點`;result.classList.add('show');busy=false},860)
+}
+button.addEventListener('click',roll);addEventListener('keydown',e=>{if(e.code==='Space'){e.preventDefault();roll()}});roll();
+</script>
+</body>
+</html>

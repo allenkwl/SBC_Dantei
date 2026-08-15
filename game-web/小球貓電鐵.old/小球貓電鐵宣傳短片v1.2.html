@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小球貓電鐵｜宣傳短片 v1.2</title>
+<style>
+/* ────────────────────────────────────────────────────────────────
+   宣傳短片 v1.2：徹底移除 iframe，改成把程式碼直接複製進來。
+   v1.1 用 iframe 嵌入正式遊戲與模擬器，實測還是常常出問題（跨 frame 的 postMessage／
+   讀取 contentDocument／音訊控制，只要瀏覽器安全政策、載入時機有一點落差就會卡住或
+   整段空白，而且很難穩定重現、不容易除錯）。這一版不再嵌任何 iframe：
+   ‧ 地圖／列車奔馳／直升機捷徑 → 三段共用同一個 <canvas>，直接載入跟遊戲一樣的
+     map_data.js／data.js／render.js，配一個最小的假 Game 物件，畫出真正的棋盤。
+     列車奔馳改成真的在地圖上沿真實路線跑（Render.movePiece，跟遊戲移動棋子同一支
+     函式），列車圖每次隨機挑「普通車」或「高鐵」；直升機捷徑則原封不動照抄自
+     「捷徑卡片直升機動畫模擬」的飛行邏輯。
+   ‧ 到站慶祝 → 整段 DOM／CSS／JS 原封不動照抄自「目的地慶祝動畫模擬」v1.1～v1.3
+     （含即時時鐘、鋪滿整個舞台的小朋友座標），拿掉不需要的控制面板跟兩段式提示；
+     舞台鎖定跟背景圖同樣的 3:2 比例（原理跟遊戲的 #dc-stage.fixed-ratio 一樣），
+     不然 16:9 的短片畫框硬把 3:2 的圖 cover 裁切，時鐘／小朋友／列車的百分比位置
+     會跟著偏掉。
+   ‧ 擲骰 → 骰子沿用正式遊戲的 DOM 結構、圖檔與 keyframes（跟 v1.1 一樣不變），但
+     背景改成跟地圖／列車奔馳／直升機共用同一個 canvas，疊一層半透明深色罩，
+     變成骰子真的浮在遊戲畫面上（而不是原本那個跟遊戲無關的深藍色橢圓氈墊）。
+   ‧ 標題／有錢貓咪／片尾 → 維持 CSS 自演，這幾段本來就沒有對應的遊戲畫面。
+   時間軸仍然由短片自己以 setTimeout 掌握；canvas 動畫（Render 內部的 rAF）在分頁被
+   隱藏時會照瀏覽器標準行為凍結，但這跟直接玩正式遊戲時分頁被隱藏的行為完全一樣，
+   不是這次改動造成的新問題，分頁恢復可見時會自動接上。
+   ──────────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+  --gold: #ffd24a; --ink: #10293f; --deep: #0b1d31;
+  --ui: "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--deep); font-family: var(--ui); }
+body { display: grid; place-items: center; padding: 20px; }
+
+#film {
+  position: relative; isolation: isolate; overflow: hidden;
+  width: min(100%, 1280px); aspect-ratio: 16 / 9;
+  border: 4px solid var(--gold); border-radius: 20px; background: #08161f;
+  box-shadow: 0 26px 70px #000c;
+}
+
+/* ── 場景切換 ─────────────────────────────────────────── */
+.scene { position: absolute; inset: 0; opacity: 0; transition: opacity .6s ease; pointer-events: none; }
+.scene.active { opacity: 1; }
+.fill { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* ── 字幕 ─────────────────────────────────────────────── */
+.cap {
+  position: absolute; z-index: 8; left: 5%; right: 5%; bottom: 8%;
+  color: #fff; font-weight: 900; line-height: 1.25;
+  font-size: clamp(20px, 3.7vw, 50px);
+  text-shadow: 0 4px 0 #123, 0 8px 20px #000d;
+  opacity: 0; transform: translateY(18px);
+}
+.scene.active .cap { animation: capIn .55s ease .3s both; }
+.cap b { color: var(--gold); }
+.cap small { display: block; margin-top: .45em; font-size: .45em; color: #ffe9a0; letter-spacing: .06em; }
+.cap.center { text-align: center; }
+@keyframes capIn { to { opacity: 1; transform: none; } }
+
+.vig { position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  box-shadow: inset 0 -140px 110px -80px #000d, inset 0 0 90px #0012264d; }
+
+/* ── 1. 主畫面 ─────────────────────────────────────────── */
+.s-title { background: #08161f; }
+.s-title .fill { filter: brightness(.62) saturate(1.05); }
+.scene.active .s-title-img { animation: slowZoom 6s ease-out both; }
+@keyframes slowZoom { from { transform: scale(1.14); } to { transform: scale(1); } }
+.title-box { position: absolute; z-index: 7; inset: 0; display: grid; place-content: center; text-align: center; padding: 4vw; }
+.badge { display: inline-block; margin: 0 auto .5em; padding: .4em 1.1em; border: 2px solid #ffeaa8;
+  border-radius: 99px; background: #143b59d9; color: #ffeaa8; font-weight: 900; letter-spacing: .14em;
+  font-size: clamp(12px, 1.5vw, 19px); }
+.logo { color: var(--gold); font-size: clamp(40px, 8.4vw, 118px); font-weight: 900; letter-spacing: .06em;
+  -webkit-text-stroke: 2px #5d3703; text-shadow: 0 7px 0 #123, 0 14px 30px #000c; }
+.tagline { margin-top: .3em; color: #fff; font-weight: 900; font-size: clamp(16px, 2.7vw, 36px);
+  letter-spacing: .1em; text-shadow: 0 4px 0 #123, 0 8px 18px #000c; }
+.scene.active .title-box > * { animation: riseIn .7s ease both; }
+.scene.active .badge { animation-delay: .15s; }
+.scene.active .logo { animation-delay: .35s; }
+.scene.active .tagline { animation-delay: .6s; }
+@keyframes riseIn { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+
+/* ── 共用棋盤 canvas：地圖／列車奔馳／直升機捷徑三段共用 ─────
+   跟遊戲背景色一致（Render.frame() 每格都先填 #1B5FA8），canvas 還沒畫出第一幀時
+   也不會露出奇怪的底色。z-index 0，讓它墊在所有 .scene 最底下；哪個場景會透出來
+   看得到，取決於該場景自己有沒有蓋一層不透明的背景（地圖／奔馳／直升機三段故意
+   不設背景色，其餘場景都有自己的背景，天然蓋住看不到 canvas）。 */
+#bg-canvas { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; display: block; background: #1B5FA8; }
+.s-map, .s-run, .s-heli, .s-dice { background: transparent; }
+
+/* ── 3. 擲骰子：改用共用棋盤 canvas 當背景（真正的遊戲畫面），骰子本身沿用
+   正式遊戲的骰子結構與動畫（.dice-cup／.die／face-N／diceThrow1~5／diceLand
+   全部原封不動取自正式遊戲 小球貓電鐵v1.28.html，連圖檔與關鍵畫格都一樣），
+   差別只在於背景換成真的棋盤、觸發時機由短片控制，不必等 AI 剛好擲骰。 */
+/* 背景換成真的棋盤之後畫面比原來的深藍漸層雜，加一層淡淡的深色罩幫骰子跟合計提到前面，
+   但要留得夠透明，讓看得出來背後真的是遊戲畫面，不是隨便一塊純色。 */
+.dice-scrim { position: absolute; z-index: 1; inset: 0; background: radial-gradient(ellipse at 50% 46%, #0a1b2b66 0%, #0a1b2bb3 75%, #0a1b2bd9 100%); }
+.dice-cup { position: absolute; z-index: 5; left: 50%; top: 47%; width: 340px; height: 220px;
+  transform: translate(-50%, -50%) scale(var(--dice-zoom, 1)); }
+.die {
+  position: absolute; display: block; aspect-ratio: 2948/3201;
+  background-image: url('../圖片/骰子/骰子六面圖v0.3.png'); background-size: 300% 200%; background-repeat: no-repeat;
+  filter: drop-shadow(0 16px 10px rgba(0,0,0,.42)); transform-origin: 50% 57%;
+  transform: translate(-50%, -50%); opacity: 0;
+}
+.face-1 { background-position: 0% 0%; }.face-2 { background-position: 50% 0%; }.face-3 { background-position: 100% 0%; }
+.face-4 { background-position: 0% 100%; }.face-5 { background-position: 50% 100%; }.face-6 { background-position: 100% 100%; }
+.dice-3 .die { width: 160px; }
+.scene.active .dice-cup .die { animation-duration: .8s; animation-timing-function: cubic-bezier(.15,.8,.25,1); animation-fill-mode: both; }
+.die.t1 { animation-name: diceThrow1; }.die.t2 { animation-name: diceThrow2; }.die.t3 { animation-name: diceThrow3; }
+.die.t4 { animation-name: diceThrow4; }.die.t5 { animation-name: diceThrow5; }
+@keyframes diceThrow1 { 0%{opacity:0;transform:translate(-300%,-300%) scale(.22) rotate(-250deg)} 12%{opacity:1} 42%{transform:translate(-185%,-188%) scale(.62) rotate(105deg)} 68%{transform:translate(-96%,-84%) scale(1.13) rotate(440deg)} 84%{transform:translate(-57%,-43%) scale(.91) rotate(620deg)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(720deg)} }
+@keyframes diceThrow2 { 0%{opacity:0;transform:translate(-290%,-325%) scale(.18) rotate(220deg)} 12%{opacity:1} 43%{transform:translate(-174%,-196%) scale(.60) rotate(-130deg)} 68%{transform:translate(-90%,-88%) scale(1.14) rotate(-455deg)} 84%{transform:translate(-54%,-45%) scale(.90) rotate(-640deg)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(-720deg)} }
+@keyframes diceThrow3 { 0%{opacity:0;transform:translate(-335%,-280%) scale(.18) rotate(-240deg)} 13%{opacity:1} 43%{transform:translate(-202%,-176%) scale(.58) rotate(135deg)} 68%{transform:translate(-105%,-79%) scale(1.08) rotate(455deg)} 84%{transform:translate(-55%,-44%) scale(.91) rotate(635deg)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(720deg)} }
+.total {
+  position: absolute; z-index: 7; left: 50%; top: 20%; transform: translateX(-50%);
+  padding: .35em 1.1em; border: 3px solid #fff3b4; border-radius: 99px; background: #10314bE6;
+  color: var(--gold); font-weight: 900; font-size: clamp(19px, 3vw, 40px); letter-spacing: .08em;
+  opacity: 0; white-space: nowrap;
+}
+.scene.active .total { animation: popIn .45s cubic-bezier(.2,1.6,.4,1) 1.35s both; }
+@keyframes popIn { from { opacity: 0; transform: translateX(-50%) scale(.5); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+
+/* ── 4. 列車奔馳：改成真的在共用棋盤上沿真實路線跑（見下方 startRun()） ── */
+
+/* ── 5. 直升機捷徑：原封不動照抄「捷徑卡片直升機動畫模擬」的疊加圖層樣式 ── */
+#h-heli { position: absolute; z-index: 10; width: 9%; transform: translate(-50%,-62%) scaleX(var(--flight-dir,1)) scale(var(--flight-scale,1)); pointer-events: none; filter: drop-shadow(0 9px 5px #102d4288); opacity: 0; transition: opacity .15s; }
+#h-heli.show { opacity: 1; }
+#h-heli.fly { animation: hBob .24s ease-in-out infinite alternate; }
+@keyframes hBob { to { margin-top: -9px; transform: translate(-50%,-62%) scaleX(var(--flight-dir,1)) scale(var(--flight-scale,1)) rotate(-5deg); } }
+#h-card { position: absolute; z-index: 20; left: 4%; top: 7%; width: min(280px, 40vw); padding: 1em 1.15em;
+  border: 4px solid #fff4b0; border-radius: 18px; background: linear-gradient(145deg,#266b99,#123751);
+  box-shadow: 0 8px 0 #0b2b4388; color: #fff; transform: translateY(-135%); opacity: 0; transition: .42s; }
+#h-card.show { transform: none; opacity: 1; }
+#h-card small { color: #ffe481; font-weight: 900; letter-spacing: .15em; }
+#h-card h1 { margin: .3em 0 .1em; font-size: clamp(22px, 2.6vw, 34px); }
+#h-card p { margin: 0; font-weight: 800; font-size: clamp(12px, 1.4vw, 16px); }
+.h-banner { position: absolute; z-index: 20; left: 50%; top: 10%; transform: translateX(-50%) scale(.7);
+  padding: .5em 1.1em; border: 3px solid #fff; border-radius: 999px; background: #fffdf3; color: #183b55;
+  box-shadow: 0 5px #9acfe0; font-weight: 900; white-space: nowrap; opacity: 0; transition: .35s;
+  font-size: clamp(14px, 1.8vw, 20px); }
+.h-banner.show { transform: translateX(-50%) scale(1); opacity: 1; }
+#h-arrival { top: 22%; font-size: clamp(18px, 2.4vw, 28px); }
+
+/* ── 6. 進站慶祝：原封不動照抄「目的地慶祝動畫模擬」v1.1~v1.3 的舞台／小朋友／時鐘 ── */
+/* 到站舞台鎖定跟背景圖同樣的 3:2 比例（車站月台.png 本身就是 3:2），道理跟正式遊戲的
+   #dc-stage.fixed-ratio、模擬器的「固定比例」開關一樣：不鎖比例的話，16:9 的短片畫框跟
+   3:2 的舞台長寬比不同，用 cover 硬塞會裁掉左右一部分，時鐘／小朋友／列車那些用百分比
+   算好的位置就會跟著偏掉。這裡改成置中的 3:2 內縮框，左右多出來的空間用深色 letterbox
+   補滿，跟原圖比例完全一致，位置就不會跑掉。 */
+.s-arrive { background: #0b1620; display: flex; align-items: center; justify-content: center; }
+#dc-stage { position: relative; height: 100%; max-width: 100%; aspect-ratio: 3 / 2; overflow: hidden;
+  background: #d8ebf4 url('../圖片/車站月台.png') center/cover no-repeat; }
+#dc-station-name { position: absolute; z-index: 4; top: 34%; left: 50%; transform: translateX(-50%);
+  min-width: 180px; padding: 9px 16px; border: 4px solid #fff; border-radius: 9px; box-shadow: 0 5px #155377;
+  background: #2775a7; color: #fff; text-align: center; font-size: clamp(20px,3vw,34px); font-weight: 900; letter-spacing: .12em; }
+#dc-kids { position: absolute; z-index: 6; inset: 0; pointer-events: none; }
+.dc-kid { position: absolute; height: auto; transform-origin: 50% 100%; filter: drop-shadow(0 3px 2px #19374855);
+  animation: dcCheer var(--jump-duration) ease-in-out var(--jump-delay) infinite alternate; }
+@keyframes dcCheer { from { transform: translateY(0) rotate(0deg); } to { transform: translateY(calc(-1 * var(--jump-height))) rotate(var(--jump-tilt)); } }
+#dc-clock { position: absolute; z-index: 3; left: 49.9%; top: 19.9%; width: 16.9%; height: 25.4%; transform: translate(-50%,-50%);
+  border-radius: 50%; background: #f8e9c9; border: solid #24222a; border-width: 6%;
+  box-shadow: 0 4px 10px #00000059, inset 0 0 0 2px #ffffff66; }
+.dc-clock-tick { position: absolute; left: 50%; top: 0; width: 2px; height: 50%; margin-left: -1px; transform-origin: 50% 100%; }
+.dc-clock-tick::before { content: ''; position: absolute; top: 6%; left: 0; width: 2px; height: 11%; background: #6b4a2c; }
+.dc-clock-num { position: absolute; font-weight: 800; color: #6b4a2c; font-size: 19%; line-height: 1; font-family: ui-monospace,Menlo,monospace; }
+.dc-clock-num.n12 { top: 6%; left: 50%; transform: translate(-50%,0); }
+.dc-clock-num.n3  { top: 50%; right: 7%; transform: translate(0,-50%); }
+.dc-clock-num.n6  { bottom: 4%; left: 50%; transform: translate(-50%,0); }
+.dc-clock-num.n9  { top: 50%; left: 7%; transform: translate(0,-50%); }
+.dc-clock-hand { position: absolute; left: 50%; bottom: 50%; border-radius: 3px; background: linear-gradient(#3c2c1c,#1b120a); transform-origin: 50% 100%; }
+.dc-clock-hand.hour { width: 7%; height: 25%; margin-left: -3.5%; }
+.dc-clock-hand.min  { width: 4.5%; height: 36%; margin-left: -2.25%; }
+.dc-clock-hand.sec  { width: 1.6%; height: 42%; margin-left: -0.8%; background: linear-gradient(#c1362b,#8a1f17); border-radius: 2px; }
+.dc-clock-pivot { position: absolute; left: 50%; top: 50%; width: 9%; height: 9%; margin: -4.5% 0 0 -4.5%; border-radius: 50%; background: #4a3626; box-shadow: 0 0 0 1px #2a1d1266; z-index: 1; }
+#dc-train { position: absolute; z-index: 7; width: var(--tw,165%); height: auto; right: var(--tfrom,-270%); bottom: var(--tb,-115%);
+  transition: right var(--tdur,3.8s) cubic-bezier(.14,.77,.22,1); }
+#dc-train.arrive { right: var(--tto,-95%); }
+.dc-confetti { position: absolute; z-index: 9; inset: 0; pointer-events: none; overflow: hidden; }
+.dc-confetti i { position: absolute; top: -26px; left: var(--x); width: 8px; height: 15px; background: var(--c);
+  animation: dcFall 2.8s linear infinite; animation-delay: var(--d); }
+@keyframes dcFall { to { transform: translate(var(--dx),670px) rotate(520deg); } }
+#dc-arrival { position: absolute; z-index: 12; top: 22%; left: 74%; transform: translateX(-50%); width: 38%; text-align: center;
+  color: #fff; text-shadow: 0 3px 0 #16415c,0 5px 14px #16384e99; }
+#dc-arrival h2 { margin: 0; font-size: clamp(28px,4vw,50px); }
+#dc-arrival p { margin: 6px 0; font-size: clamp(14px,1.7vw,21px); font-weight: 800; }
+
+/* ── 7. 有錢貓咪 ───────────────────────────────────────── */
+.s-rich { background: radial-gradient(ellipse at 50% 36%, #ffdd8a 0%, #f0a63c 44%, #b45f12 100%); overflow: hidden; }
+.rich-wrap { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center;
+  text-align: center; transform: translateY(-9%); z-index: 5; }
+.rich-cat { position: relative; width: clamp(120px, 17vw, 240px); aspect-ratio: 1; border-radius: 28%;
+  border: 5px solid #fff6d0; box-shadow: 0 13px 0 #8b4e08, 0 24px 44px #0007, 0 0 60px #fff2a8cc; }
+.scene.active .rich-cat { animation: richPop .6s cubic-bezier(.2,1.6,.4,1) both, richBob 1.15s ease-in-out .6s infinite; }
+@keyframes richPop { from { opacity: 0; transform: scale(.4) rotate(-14deg); } to { opacity: 1; transform: none; } }
+@keyframes richBob { 50% { transform: translateY(-12px) scale(1.03); } }
+.crown { position: absolute; top: -.44em; left: 50%; font-size: clamp(32px, 5vw, 68px);
+  transform: translateX(-50%) rotate(-9deg); filter: drop-shadow(0 5px 6px #0006); }
+.scene.active .crown { animation: crownTilt 1.15s ease-in-out infinite; }
+@keyframes crownTilt { 50% { transform: translateX(-50%) rotate(9deg) translateY(-5px); } }
+.amount { margin-top: .42em; color: #fffbe8; font-weight: 900; font-variant-numeric: tabular-nums;
+  font-size: clamp(30px, 5.6vw, 78px); -webkit-text-stroke: 2px #6b3a06;
+  text-shadow: 0 6px 0 #8b4e08, 0 12px 26px #0008; }
+.amount-label { margin-top: .05em; color: #4a2a05; font-weight: 900; letter-spacing: .18em;
+  font-size: clamp(12px, 1.8vw, 24px); text-shadow: 0 2px 0 #ffe9a8; }
+.coin { position: absolute; top: -12%; z-index: 3; font-size: clamp(19px, 2.5vw, 38px);
+  filter: drop-shadow(0 3px 4px #0005); }
+.scene.active .coin { animation: coinFall linear infinite; }
+@keyframes coinFall {
+  0% { transform: translateY(-10%) rotate(0); opacity: 0; }
+  12% { opacity: 1; } 88% { opacity: 1; }
+  100% { transform: translateY(920%) rotate(760deg); opacity: 0; }
+}
+.s-rich .cap { text-align: center; color: #fffdf2; text-shadow: 0 4px 0 #8b4e08, 0 8px 18px #0008; bottom: 5.5%; }
+
+/* ── 8. 結尾 ───────────────────────────────────────────── */
+.s-end { background: #08161f; }
+.s-end .fill { filter: brightness(.5) saturate(1.05); }
+.end-box { position: absolute; inset: 0; z-index: 7; display: grid; place-content: center; text-align: center; padding: 4vw; }
+.scene.active .end-box > * { animation: riseIn .7s ease both; }
+.scene.active .end-box .badge { animation-delay: .2s; }
+.scene.active .end-box .logo { animation-delay: .45s; }
+.scene.active .end-box .tagline { animation-delay: .75s; }
+
+/* ── 控制列 ───────────────────────────────────────────── */
+#gate { position: absolute; z-index: 30; inset: 0; display: grid; place-items: center;
+  background: linear-gradient(#0b2134b3, #09182bee), url("assets/screens/title.jpg") center / cover; }
+#gate[hidden] { display: none; }
+#gate button { padding: .7em 1.5em; border: 3px solid #fff3b4; border-radius: 99px;
+  background: linear-gradient(#ffdf68, #ec9b1e); box-shadow: 0 7px 0 #8b4e08, 0 16px 28px #0009;
+  color: #1b3041; font: 900 clamp(20px, 3vw, 38px) var(--ui); cursor: pointer; }
+#gate button:active { transform: translateY(5px); box-shadow: 0 2px 0 #8b4e08; }
+#gate p { margin-top: 1.1em; color: #fff; font-weight: 800; text-align: center;
+  font-size: clamp(12px, 1.6vw, 19px); text-shadow: 0 2px 5px #000; }
+#ctl { position: absolute; z-index: 20; right: 16px; bottom: 15px; display: flex; gap: 8px; }
+#ctl button { min-width: 42px; padding: 9px 13px; border: 2px solid #ffe69a; border-radius: 12px;
+  background: #123650e8; color: #fff; font: 800 15px var(--ui); cursor: pointer; box-shadow: 0 3px 0 #071b2c; }
+#ctl button:hover { background: #235b80; }
+#bar { position: absolute; z-index: 21; inset: auto 0 0 0; height: 6px; background: #06182799; }
+#bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ffca44, #ffef8a); }
+
+@media (max-width: 720px) {
+  body { padding: 0; }
+  #film { width: 100vw; border: 0; border-radius: 0; }
+  #ctl { right: 9px; bottom: 10px; } #ctl button { padding: 6px 9px; min-width: 34px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+</style>
+</head>
+<body>
+<main id="film" aria-label="小球貓電鐵宣傳短片">
+  <!-- 共用棋盤：地圖／列車奔馳／直升機捷徑三段共用同一個 canvas，見下方 script。 -->
+  <canvas id="bg-canvas"></canvas>
+
+  <!-- 1. 主畫面 -->
+  <section class="scene s-title" data-dur="5200">
+    <img class="fill s-title-img" src="assets/screens/title.jpg" alt="">
+    <div class="title-box">
+      <div><span class="badge">台灣鐵道 × 歡樂大富翁</span></div>
+      <div class="logo">小球貓電鐵</div>
+      <div class="tagline">和貓咪一起，展開全台冒險！</div>
+    </div>
+    <div class="vig"></div>
+  </section>
+
+  <!-- 2. 地圖巡覽：共用棋盤 canvas 透出來，鏡頭在真正的地圖上慢慢橫移（見 startMap()） -->
+  <section class="scene s-map" data-dur="6000">
+    <div class="vig"></div>
+    <p class="cap">全台 <b>1600+</b> 個站點，任你闖蕩<small>夜市、車站、機場、農場……每一站都有物產可以買</small></p>
+  </section>
+
+  <!-- 3. 擲骰子：沿用正式遊戲的骰子素材與動畫 -->
+  <section class="scene s-dice" data-dur="5200" data-sfx="dice">
+    <div class="dice-scrim"></div>
+    <div class="dice-cup dice-3">
+      <span class="die face-6 t1" style="left:44%; top:34%; z-index:1"></span>
+      <span class="die face-5 t3" style="left:68%; top:54%; z-index:2"></span>
+      <span class="die face-6 t2" style="left:52%; top:74%; z-index:3"></span>
+    </div>
+    <div class="total">🎲 擲出 17 點！</div>
+    <div class="vig"></div>
+    <p class="cap">輪到你了，<b>擲骰出發</b>！<small>骰子點數決定這一回合能走多遠</small></p>
+  </section>
+
+  <!-- 4. 列車奔馳：共用棋盤 canvas，一個真的棋子（普通車或高鐵，隨機）沿真實路線跑（見 startRun()） -->
+  <section class="scene s-run" data-dur="5600">
+    <div class="vig"></div>
+    <p class="cap">搭上列車，<b>走遍台灣每一站</b><small>慢車、區間車、自強號、高鐵，速度各有不同</small></p>
+  </section>
+
+  <!-- 5. 直升機捷徑：原封不動照抄「捷徑卡片直升機動畫模擬」的飛行邏輯（見 startHeli()） -->
+  <section class="scene s-heli" data-dur="7000">
+    <img id="h-heli" src="../圖片/玩家icon/直升機-靜止.png" alt="捷徑直升機">
+    <audio id="h-heli-sfx" loop preload="auto" src="assets/audio/heli.mp3"></audio>
+    <section id="h-card"><small>移動卡片</small><h1>🚁 蘇花捷徑</h1><p>直接前往花蓮</p></section>
+    <div id="h-use" class="h-banner">探險家使用「蘇花捷徑」！</div>
+    <div id="h-arrival" class="h-banner">🎉 抵達花蓮！</div>
+    <div class="vig"></div>
+    <p class="cap">善用卡片，<b>突破距離限制</b><small>「蘇花捷徑」讓直升機帶你飛越山海，直達花蓮</small></p>
+  </section>
+
+  <!-- 6. 進站慶祝：原封不動照抄「目的地慶祝動畫模擬」v1.1~v1.3 的舞台／小朋友／即時時鐘（見 startArrive()） -->
+  <section class="scene s-arrive" data-dur="7600">
+    <div id="dc-stage">
+      <div id="dc-station-name"></div>
+      <div id="dc-clock" aria-hidden="true">
+        <div class="dc-clock-num n12">12</div><div class="dc-clock-num n3">3</div>
+        <div class="dc-clock-num n6">6</div><div class="dc-clock-num n9">9</div>
+        <div class="dc-clock-hand hour" id="dc-clock-hour"></div>
+        <div class="dc-clock-hand min" id="dc-clock-min"></div>
+        <div class="dc-clock-hand sec" id="dc-clock-sec"></div>
+        <div class="dc-clock-pivot"></div>
+      </div>
+      <div id="dc-kids" aria-label="歡呼慶祝的小朋友"></div>
+      <img id="dc-train" src="../圖片/玩家icon/普悠瑪（自強號）.png" alt="到站列車">
+      <audio id="dc-cheer" preload="auto" src="../音樂.音效/歡呼聲.wav"></audio>
+      <div class="dc-confetti">
+        <i style="--x:8%;--dx:65px;--d:.1s;--c:#ff6f91"></i><i style="--x:19%;--dx:-36px;--d:.8s;--c:#ffd45a"></i><i style="--x:31%;--dx:48px;--d:.4s;--c:#72d5b4"></i><i style="--x:43%;--dx:-70px;--d:1.1s;--c:#8d83e8"></i><i style="--x:55%;--dx:51px;--d:.3s;--c:#ff9568"></i><i style="--x:68%;--dx:-42px;--d:1.3s;--c:#ff6f91"></i><i style="--x:81%;--dx:62px;--d:.6s;--c:#ffd45a"></i><i style="--x:92%;--dx:-45px;--d:.9s;--c:#72d5b4"></i>
+      </div>
+      <div id="dc-arrival"><h2>🎉 抵達目的地！</h2><p id="dc-arrival-line"></p></div>
+    </div>
+    <div class="vig"></div>
+    <p class="cap">抵達目的地，<b>全站一起歡呼</b>！<small>每一次進站，都是值得慶祝的冒險</small></p>
+  </section>
+
+  <!-- 7. 有錢貓咪 -->
+  <section class="scene s-rich" data-dur="6800">
+    <div id="coins" aria-hidden="true"></div>
+    <div class="rich-wrap">
+      <div class="rich-cat" style="background:url('assets/avatars/賓士.png') center/cover"><span class="crown">👑</span></div>
+      <div class="amount" id="amount">100萬</div>
+      <div class="amount-label">總資產</div>
+    </div>
+    <p class="cap center">從 100 萬起家，<b>成為鐵道大富翁</b>！<small>買下全台物產，讓資產一路翻倍成長</small></p>
+  </section>
+
+  <!-- 8. 結尾 -->
+  <section class="scene s-end" data-dur="5200">
+    <img class="fill" src="assets/screens/title.jpg" alt="">
+    <div class="end-box">
+      <div><span class="badge">鐵道 · 卡片 · 目的地 · 驚喜</span></div>
+      <div class="logo">下一站，等你出發！</div>
+      <div class="tagline">小球貓電鐵</div>
+    </div>
+    <div class="vig"></div>
+  </section>
+
+  <div id="gate">
+    <div>
+      <div style="text-align:center"><button id="play" type="button">▶ 點擊開始播放</button></div>
+      <p>點擊後以全螢幕播放，約 49 秒</p>
+    </div>
+  </div>
+  <div id="ctl">
+    <button id="again" type="button" title="重新播放">↻</button>
+    <button id="mute" type="button" title="靜音">🔊</button>
+    <button id="pause" type="button" title="暫停">Ⅱ</button>
+  </div>
+  <div id="bar"><i></i></div>
+
+  <!-- 背景音樂：前段輕柔（春），從擲骰起換成輕快（夏）帶動節奏 -->
+  <audio id="bgmA" src="assets/audio/spring.mp3" loop preload="auto"></audio>
+  <audio id="bgmB" src="assets/audio/summer.mp3" loop preload="auto"></audio>
+</main>
+
+<!-- 共用棋盤：跟「捷徑卡片直升機動畫模擬」同一套輕量做法——只載入 map_data.js／data.js／
+     render.js 配一個最小的假 Game 物件，不載入完整的 main.js／rules.js，畫出來的就是
+     真正的遊戲棋盤，但短片自己完全掌控什麼時候要棋子走去哪、直升機飛去哪。 -->
+<script src="map_data.js"></script>
+<script src="src/data.js"></script>
+<script>window.Game = {players: [], cur: 0, state: 'awaitRoll', month: 6, destination: null, curPlayer() { return this.players[0]; }};</script>
+<script src="src/render-v1.28.js"></script>
+
+<script>
+(() => {
+  const scenes = [...document.querySelectorAll('.scene')];
+  const durations = scenes.map(s => +s.dataset.dur);
+  const TOTAL = durations.reduce((a, b) => a + b, 0);
+  const bar = document.querySelector('#bar i');
+  const gate = document.querySelector('#gate');
+  const btnPause = document.querySelector('#pause');
+  const btnMute = document.querySelector('#mute');
+
+  // ── 音訊 ──────────────────────────────────────────────
+  // 一次性音效（骰子／螺旋槳／歡呼）每次都用新的 Audio，播完自然回收，
+  // 不會因為上一段還沒播完就被下一段切斷。
+  const bgmA = document.querySelector('#bgmA'), bgmB = document.querySelector('#bgmB');
+  const PEAK = new Map([[bgmA, .5], [bgmB, .46]]);
+  let muted = false, fadeT = null, sfx = null;
+
+  function fadeTo(target) {
+    clearInterval(fadeT);
+    fadeT = setInterval(() => {
+      let settled = true;
+      for (const track of PEAK.keys()) {
+        const want = (!muted && track === target) ? PEAK.get(track) : 0;
+        const gap = want - track.volume;
+        if (Math.abs(gap) < .04) track.volume = want;
+        else { track.volume = Math.min(1, Math.max(0, track.volume + Math.sign(gap) * .04)); settled = false; }
+        if (track.volume === 0 && !track.paused) track.pause();
+      }
+      if (settled) clearInterval(fadeT);
+    }, 40);
+    // play() 必須留在使用者手勢的同一個呼叫堆疊裡，前面不能有 await，
+    // 否則手勢授權已結束，會被瀏覽器自動播放政策擋掉（而且是靜默失敗）。
+    if (!muted && target && target.paused) target.play().catch(() => {});
+  }
+  const trackFor = i => (i <= 1 ? bgmA : bgmB);   // 主畫面＋地圖用輕柔曲，其餘用輕快曲
+  function playSfx(name) {
+    if (muted || !name) return;
+    sfx = new Audio(`assets/audio/${name}.mp3`);
+    sfx.volume = name === 'cheer' ? .75 : .55;
+    sfx.play().catch(() => {});
+  }
+  function stopSfx() { if (sfx) { sfx.pause(); sfx = null; } }
+  // 直升機螺旋槳聲、到站歡呼聲現在是直接寫在這支檔案裡的 <audio>（不再是 iframe 裡的獨立
+  // 音訊），靜音鈕與暫停要一起管到這兩個，才不會靜音了它們卻還在放。
+  const heliSfxEl = document.querySelector('#h-heli-sfx'), cheerEl = document.querySelector('#dc-cheer');
+  const LOCAL_SFX = [heliSfxEl, cheerEl];
+  function setLocalSfxMuted(on) { LOCAL_SFX.forEach(a => { a.muted = on; }); }
+  function pauseLocalSfx() { LOCAL_SFX.forEach(a => a.pause()); }
+
+  // ── 結尾金幣雨與資產數字 ───────────────────────────────
+  const coinBox = document.querySelector('#coins');
+  for (let i = 0; i < 18; i++) {
+    const c = document.createElement('span');
+    c.className = 'coin';
+    c.textContent = i % 3 === 0 ? '💰' : '🪙';
+    c.style.left = `${(i * 5.6 + (i % 4) * 3.2) % 96}%`;
+    c.style.animationDuration = `${2.3 + (i % 5) * .5}s`;
+    c.style.animationDelay = `${(i % 7) * .35}s`;
+    coinBox.appendChild(c);
+  }
+  const amountEl = document.querySelector('#amount');
+  // 進位規則跟遊戲 data.js 的 formatMoney() 一致（萬→億→兆）
+  function money(wan) {
+    let n = Math.round(Math.abs(wan));
+    const zhao = Math.floor(n / 1e8); n -= zhao * 1e8;
+    const yi = Math.floor(n / 1e4); n -= yi * 1e4;
+    const out = [];
+    if (zhao) out.push(zhao + '兆');
+    if (yi) out.push(yi + '億');
+    if (n || !out.length) out.push(n + '萬');
+    return out.join('');
+  }
+  let countT = null;
+  function runCount() {
+    clearInterval(countT);
+    const t0 = performance.now(), span = 3400, from = 100, to = 88888;
+    countT = setInterval(() => {
+      const p = Math.min(1, (performance.now() - t0) / span);
+      amountEl.textContent = money(from + (to - from) * (1 - Math.pow(1 - p, 3)));  // easeOutCubic
+      if (p >= 1) clearInterval(countT);
+    }, 45);
+  }
+
+  // ── 時間軸 ────────────────────────────────────────────
+  // 用 setTimeout 推進場景，不用 requestAnimationFrame：rAF 在分頁被判定為隱藏時
+  // 會完全停住（實測 0 幀），整支短片會卡在第一段不動；setTimeout 最多只是被降頻。
+  let idx = 0, timer = null, startedAt = 0, leftOver = 0, running = false, done = false;
+
+  // ── 共用棋盤（地圖／列車奔馳／直升機捷徑） ───────────────────
+  // 三段各自的啟動函式都用 sceneGen 這個世代編號自保：呼叫時記下當時的編號，
+  // 之後每次 rAF/setTimeout 續跑前都先比對編號還是不是同一個，一旦短片已經
+  // 切到別的場景（sceneGen 變了）就直接停手，不會有上一段的動畫殘留在背景繼續跑、
+  // 白白佔資源，也不會在使用者快速用方向鍵切場景時發生兩段動畫互相打架。
+  let sceneGen = 0;
+  Data.load();
+  Render.init(document.querySelector('#bg-canvas'));
+
+  const RUN_STATIONS = ['tr_taipei', 'tr_taichung', 'tr_tainan', 'tr_kaohsiung', 'tr_hualien'];
+  function pickRunChain(hops) {
+    // 只挑真正的景點／車站站名，不要挑到紅／藍／黃格這種純功能方塊——不然列車看起來
+    // 會像是在兩個空白格子之間跑，一點也不像「走遍台灣每一站」。
+    const ids = [...Data.stations.keys()].filter(id => !Data.isTile(id));
+    for (let attempt = 0; attempt < 40; attempt++) {
+      let cur = ids[Math.floor(Math.random() * ids.length)];
+      const chain = [cur];
+      let ok = true;
+      for (let h = 0; h < hops; h++) {
+        const links = (Data.adj.get(cur) || []).filter(l => {
+          const rn = Data.routeNameOf(cur, l.to);
+          return rn !== '船運航線' && rn !== '飛機航線' && !chain.includes(l.to) && !Data.isTile(l.to);
+        });
+        if (!links.length) { ok = false; break; }
+        const next = links[Math.floor(Math.random() * links.length)].to;
+        chain.push(next); cur = next;
+      }
+      if (ok) return chain;
+    }
+    return null;
+  }
+  // 擲骰背後也是真的棋盤，只是不需要鏡頭移動——固定看著一處熱鬧的城市即可，
+  // 有 .dice-scrim 那層半透明深色罩幫忙把骰子跟合計點數留在視覺最前面。
+  function startDice(gen) {
+    const st = Data.stations.get(RUN_STATIONS[Math.floor(Math.random() * RUN_STATIONS.length)]);
+    Render.onFrame = null;
+    window.Game.players = [];
+    Render.freeLook = true;
+    Render.cam.x = Render.cam.tx = st.x;
+    Render.cam.y = Render.cam.ty = st.y;
+    Render.cam.scale = Render.cam.tscale = Render.ZOOM_NEAR;
+  }
+  function startMap(gen) {
+    const st = Data.stations.get(RUN_STATIONS[Math.floor(Math.random() * RUN_STATIONS.length)]);
+    // 起訖點都要夾在世界邊界內（留一點邊界緩衝），不然像台北、花蓮這種本來就在邊緣的站，
+    // 鏡頭橫移過去很容易滑出地圖變成整片空白的海。
+    const w = Data.world, margin = 150;
+    const clampX = x => Math.min(w.x + w.w - margin, Math.max(w.x + margin, x));
+    const panFrom = clampX(st.x - 200), panTo = clampX(st.x + 200);
+    Render.freeLook = true;
+    Render.cam.x = Render.cam.tx = panFrom;
+    Render.cam.y = Render.cam.ty = st.y;
+    Render.cam.scale = Render.cam.tscale = Render.ZOOM_LOOK;
+    const t0 = performance.now();
+    (function pan() {
+      if (gen !== sceneGen) return;
+      const t = Math.min(1, (performance.now() - t0) / 5400);
+      Render.cam.tx = panFrom + (panTo - panFrom) * t;
+      if (t < 1) requestAnimationFrame(pan);
+    })();
+  }
+  function startRun(gen) {
+    const chain = pickRunChain(5) || pickRunChain(2) || [[...Data.stations.keys()][0]];
+    const pts = [];
+    for (let i = 0; i < chain.length - 1; i++) {
+      const seg = Data.edgePath(chain[i], chain[i + 1]);
+      pts.push(...(i === 0 ? seg : seg.slice(1)));
+    }
+    const first = Data.stations.get(chain[0]);
+    const train = Math.random() < 0.5 ? 'local' : 'hsr';   // 普通車或高鐵，隨機
+    const pl = {pos: chain[0], ax: first.x, ay: first.y, trail: [{x: first.x, y: first.y}], color: '#F08C00', train};
+    Render.onFrame = null;
+    window.Game.players = [pl]; window.Game.cur = 0;
+    Render.freeLook = false;
+    Render.snapTo(first.x, first.y);
+    Render.cam.scale = Render.cam.tscale = Render.ZOOM_NEAR;
+    if (pts.length > 1) Render.movePiece(pl, pts, 5000, () => { pl.pos = chain[chain.length - 1]; });
+  }
+  // 以下三個函式（HELI_STILL/HELI_FLY／setHeli／play 的座標與縮放邏輯）原封不動照抄自
+  // 「捷徑卡片直升機動畫模擬 v1.0」，只是拿掉了控制面板，改成短片自己決定起點站。
+  const HELI_STILL = '../圖片/玩家icon/直升機-靜止.png', HELI_FLY = '../圖片/玩家icon/直升機-飛行.png';
+  function startHeli(gen) {
+    const heli = document.querySelector('#h-heli');
+    const origins = ['tr_taipei', 'tr_taichung', 'tr_tainan', 'tr_kaohsiung'];
+    const start = Data.stations.get(origins[Math.floor(Math.random() * origins.length)]);
+    const target = Data.stations.get('tr_hualien');
+    let pos = {x: start.x, y: start.y};
+    Render.onFrame = () => { if (gen === sceneGen) { const s = Render.worldToCss(pos.x, pos.y); heli.style.left = s.x + 'px'; heli.style.top = s.y + 'px'; } };
+    Render.freeLook = false;
+    Render.snapTo(start.x, start.y);
+    Render.cam.scale = Render.cam.tscale = Render.ZOOM_NEAR;
+    const setHeli = flying => {
+      heli.src = flying ? HELI_FLY : HELI_STILL;
+      if (flying) { if (!muted) { heliSfxEl.currentTime = 0; heliSfxEl.play().catch(() => {}); } } else { heliSfxEl.pause(); heliSfxEl.currentTime = 0; }
+    };
+    heli.style.setProperty('--flight-dir', target.x > start.x ? -1 : 1);
+    heli.style.setProperty('--flight-scale', 1);
+    heli.classList.remove('fly'); heli.classList.add('show');
+    setHeli(false);
+    document.querySelector('#h-card').classList.remove('show');
+    document.querySelector('#h-use').classList.remove('show');
+    document.querySelector('#h-arrival').classList.remove('show');
+    const dist = Math.hypot(target.x - start.x, target.y - start.y);
+    const duration = Math.min(4200, Math.max(2200, dist / 95 * 1000));
+    document.querySelector('#h-card').classList.add('show');
+    setTimeout(() => { if (gen === sceneGen) document.querySelector('#h-use').classList.add('show'); }, 280);
+    setTimeout(() => {
+      if (gen !== sceneGen) return;
+      setHeli(true);
+      heli.classList.add('fly');
+      const t0 = performance.now();
+      (function tick() {
+        if (gen !== sceneGen) return;
+        const t = Math.min(1, (performance.now() - t0) / duration);
+        pos = {x: start.x + (target.x - start.x) * t, y: start.y + (target.y - start.y) * t};
+        const scale = t < .15 ? 1 + .35 * (t / .15) : t > .82 ? 1 + .35 * ((1 - t) / .18) : 1.35;
+        heli.style.setProperty('--flight-scale', Math.max(1, scale));
+        Render.cam.x = Render.cam.tx = pos.x; Render.cam.y = Render.cam.ty = pos.y;
+        if (t < 1) { requestAnimationFrame(tick); return; }
+        heli.classList.remove('fly');
+        heli.style.setProperty('--flight-scale', 1);
+        pos = {x: target.x, y: target.y};
+        Render.snapTo(target.x, target.y);
+        setHeli(false);
+        setTimeout(() => { if (gen === sceneGen) document.querySelector('#h-arrival').classList.add('show'); }, 400);
+      })();
+    }, 500);
+  }
+  // 以下這一段（dc-clock 的即時指針、DEFAULT_KIDS 的舞台百分比座標）原封不動照抄自
+  // 「目的地慶祝動畫模擬」v1.1～v1.3；短片不需要控制面板與兩段式「揭曉下一站」提示，
+  // 只留下單次播完的到站演出。
+  const ARRIVE_STATIONS = ['基隆', '台北', '台中', '台南', '高雄', '花蓮', '台東', '澎湖', '金門'];
+  const KID_IMAGES = [
+    '../圖片/慶祝到站小朋友/小朋友01-男孩黃衣.png', '../圖片/慶祝到站小朋友/小朋友02-女孩紅衣.png',
+    '../圖片/慶祝到站小朋友/小朋友03-男孩藍帽.png', '../圖片/慶祝到站小朋友/小朋友04-女孩黃衣.png',
+  ];
+  const KID_JUMP_PRESETS = [
+    {dur: 1.00, delay: -0.18, height: 15, tilt: -0.7}, {dur: 0.86, delay: -0.51, height: 11, tilt: 0.5},
+    {dur: 1.13, delay: -0.76, height: 18, tilt: -0.45}, {dur: 0.94, delay: -0.34, height: 13, tilt: 0.65},
+  ];
+  const DEFAULT_KIDS = [
+    {img: 0, left: -5, bottom: -5, width: 18}, {img: 1, left: 6, bottom: -5, width: 18},
+    {img: 2, left: 18, bottom: -5, width: 18}, {img: 3, left: 29, bottom: -5, width: 18},
+  ];
+  (function initClockTicks() {
+    const clock = document.querySelector('#dc-clock');
+    [1, 2, 4, 5, 7, 8, 10, 11].forEach(hour => {
+      const tick = document.createElement('div');
+      tick.className = 'dc-clock-tick';
+      tick.style.transform = `rotate(${hour * 30}deg)`;
+      clock.appendChild(tick);
+    });
+    const hourHand = document.querySelector('#dc-clock-hour'), minHand = document.querySelector('#dc-clock-min'), secHand = document.querySelector('#dc-clock-sec');
+    const update = () => {
+      const now = new Date();
+      const h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds();
+      hourHand.style.transform = `rotate(${(h + m / 60) * 30}deg)`;
+      minHand.style.transform = `rotate(${(m + s / 60) * 6}deg)`;
+      secHand.style.transform = `rotate(${s * 6}deg)`;
+    };
+    update();
+    setInterval(update, 1000);
+  })();
+  function renderArriveKids() {
+    const box = document.querySelector('#dc-kids');
+    box.innerHTML = '';
+    DEFAULT_KIDS.forEach((k, i) => {
+      const preset = KID_JUMP_PRESETS[i % KID_JUMP_PRESETS.length];
+      const img = document.createElement('img');
+      img.className = 'dc-kid'; img.alt = '歡呼的小朋友'; img.src = KID_IMAGES[k.img];
+      img.style.left = k.left + '%'; img.style.bottom = k.bottom + '%'; img.style.width = k.width + '%';
+      img.style.setProperty('--jump-duration', preset.dur + 's');
+      img.style.setProperty('--jump-delay', preset.delay + 's');
+      img.style.setProperty('--jump-height', preset.height + 'px');
+      img.style.setProperty('--jump-tilt', preset.tilt + 'deg');
+      box.appendChild(img);
+    });
+  }
+  function startArrive() {
+    renderArriveKids();
+    const name = ARRIVE_STATIONS[Math.floor(Math.random() * ARRIVE_STATIONS.length)];
+    document.querySelector('#dc-station-name').textContent = name;
+    document.querySelector('#dc-arrival-line').textContent = `探險家 搶先抵達！獲得 ${money(1000 + Math.random() * 900000)}元`;
+    const train = document.querySelector('#dc-train');
+    train.classList.remove('arrive');
+    void train.offsetWidth;
+    requestAnimationFrame(() => requestAnimationFrame(() => train.classList.add('arrive')));
+    if (!muted) { cheerEl.currentTime = 0; cheerEl.volume = .72; cheerEl.play().catch(() => {}); }
+  }
+
+  function show(i) {
+    scenes[idx].classList.remove('active');
+    idx = i;
+    const sc = scenes[idx];
+    sc.classList.add('active');
+    stopSfx();
+    playSfx(sc.dataset.sfx);
+    sceneGen++;
+    const gen = sceneGen;
+    if (sc.classList.contains('s-dice')) startDice(gen);
+    else if (sc.classList.contains('s-map')) startMap(gen);
+    else if (sc.classList.contains('s-run')) startRun(gen);
+    else if (sc.classList.contains('s-heli')) startHeli(gen);
+    else if (sc.classList.contains('s-arrive')) startArrive();
+    if (sc.classList.contains('s-rich')) runCount(); else { clearInterval(countT); amountEl.textContent = money(100); }
+    fadeTo(trackFor(idx));
+  }
+  function elapsedBefore(i) { return durations.slice(0, i).reduce((a, b) => a + b, 0); }
+  function paint() {
+    // 播完之後要固定顯示 100%：這裡是 setInterval 一直在重算寬度，
+    // 若不特別判斷，finish() 寫進去的 100% 會馬上被下一次重算蓋回最後一段的起點百分比。
+    if (done) { bar.style.width = '100%'; return; }
+    const passed = elapsedBefore(idx) + (running ? performance.now() - startedAt : leftOver);
+    bar.style.width = Math.min(100, passed / TOTAL * 100) + '%';
+  }
+  function schedule(ms) {
+    clearTimeout(timer);
+    startedAt = performance.now();
+    running = true; done = false; leftOver = 0;
+    timer = setTimeout(next, ms);
+  }
+  function next() {
+    if (idx >= scenes.length - 1) { finish(); return; }
+    show(idx + 1);
+    schedule(durations[idx]);
+  }
+  function finish() {
+    running = false; done = true;
+    clearTimeout(timer);
+    btnPause.textContent = '▶'; btnPause.title = '播放';
+    for (const t of PEAK.keys()) t.pause();
+    pauseLocalSfx();
+    bar.style.width = '100%';
+  }
+
+  function begin() {
+    gate.hidden = true;
+    show(0);                       // show() 內會啟動音樂——必須在點擊的同一個堆疊裡
+    schedule(durations[0]);
+    // 全螢幕放在最後：它是非同步的，先 await 會讓後面的 play() 失去手勢授權
+    if (!document.fullscreenElement) document.querySelector('#film').requestFullscreen?.().catch(() => {});
+  }
+  function replay() {
+    clearTimeout(timer);
+    for (const t of PEAK.keys()) { t.currentTime = 0; }
+    show(0);
+    schedule(durations[0]);
+    btnPause.textContent = 'Ⅱ'; btnPause.title = '暫停';
+  }
+  function togglePause() {
+    if (running) {
+      leftOver = performance.now() - startedAt;
+      running = false; clearTimeout(timer);
+      for (const t of PEAK.keys()) t.pause();
+      if (sfx) sfx.pause();
+      pauseLocalSfx();
+      btnPause.textContent = '▶'; btnPause.title = '播放';
+    } else {
+      // 先把「這一段已經播多久」抄下來：schedule() 會把 leftOver 歸零，
+      // 之後再拿它回推 startedAt，進度條才不會在繼續播放時倒退回這一段的開頭。
+      const played = leftOver;
+      schedule(Math.max(0, durations[idx] - played));
+      startedAt = performance.now() - played;
+      fadeTo(trackFor(idx));
+      if (sfx) sfx.play().catch(() => {});
+      setLocalSfxMuted(muted);
+      btnPause.textContent = 'Ⅱ'; btnPause.title = '暫停';
+    }
+  }
+
+  document.querySelector('#play').addEventListener('click', begin);
+  document.querySelector('#again').addEventListener('click', replay);
+  btnPause.addEventListener('click', togglePause);
+  btnMute.addEventListener('click', () => {
+    muted = !muted;
+    btnMute.textContent = muted ? '🔇' : '🔊';
+    btnMute.title = muted ? '取消靜音' : '靜音';
+    if (muted) { stopSfx(); fadeTo(null); } else fadeTo(trackFor(idx));
+    setLocalSfxMuted(muted);
+  });
+  addEventListener('keydown', e => {
+    if (gate.hidden === false) return;
+    if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+    if (e.key === 'ArrowRight' && idx < scenes.length - 1) { show(idx + 1); schedule(durations[idx]); }
+    if (e.key === 'ArrowLeft' && idx > 0) { show(idx - 1); schedule(durations[idx]); }
+  });
+  setInterval(paint, 100);   // 進度條獨立更新，跟場景推進解耦
+
+  // 提供給自動化測試：可直接跳到指定場景，不必等真實時間
+  window.__trailer = { show, scenes, get index() { return idx; } };
+})();
+</script>
+</body>
+</html>

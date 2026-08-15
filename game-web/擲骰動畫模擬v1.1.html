@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小球貓電鐵｜擲骰動畫模擬 v1.1</title>
+<style>
+/* ────────────────────────────────────────────────────────────────
+   擲骰動畫模擬 v1.1：改用真正的遊戲背景與正式擲骰動畫。
+   v1.0 是一塊跟遊戲無關的深藍色橢圓氈墊，骰子的散落位置表也只支援 1/2/5 顆
+   （沒有 3 顆），跟正式遊戲的擲骰畫面是兩套獨立、會漂移的東西。
+   這一版改成：
+   ‧ 背景改用共用棋盤 canvas（跟「捷徑卡片直升機動畫模擬」同一套輕量做法——只載入
+     map_data.js／data.js／render.js 配一個最小假 Game 物件，畫出真正的遊戲棋盤），
+     疊一層半透明深色罩讓骰子跟合計點數留在最前面。
+   ‧ 骰子的 DOM 結構、CSS（.dice-cup／.die／face-N／dice-1/2/3/5／diceThrow1~5／
+     diceLand）與散落位置表（DICE_DEPTH_Y／DICE_LAYOUTS／shuffleDice）全部原封不動
+     照抄自正式遊戲 ui.js 的 showDice()，連 1/2/3/5 顆的支援都一樣，跟遊戲裡實際
+     擲骰完全一致，之後要整合進遊戲也不用再改動畫本身。
+   ──────────────────────────────────────────────────────────────── */
+:root { color-scheme: dark; --gold:#ffd24a; --ui:"PingFang TC","Microsoft JhengHei",system-ui,sans-serif; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #08161f; font-family: var(--ui); overflow: hidden; }
+#bg-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #1B5FA8; }
+.scrim { position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 46%, #0a1b2b66 0%, #0a1b2bb3 75%, #0a1b2bd9 100%); }
+header { position: fixed; z-index: 5; top: 4vh; left: 0; right: 0; text-align: center; color: #fff;
+  text-shadow: 0 4px 0 #12304b, 0 7px 18px #0008; pointer-events: none; }
+header h1 { margin: 0; font-size: clamp(24px, 3.6vw, 46px); letter-spacing: .06em; }
+header p { margin: 8px 0 0; color: #d8efff; font-weight: 700; font-size: clamp(13px, 1.4vw, 16px); }
+
+/* ── 骰子：以下全部原封不動照抄正式遊戲 ui.js／html 的 #dice 相關規則 ───── */
+#dice {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(.4);
+  z-index: 6; opacity: 0; pointer-events: none;
+  transition: all .22s cubic-bezier(.2,1.6,.4,1); text-align: center;
+}
+#dice.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+.dice-cup { position: relative; width: 340px; height: 220px; }
+.die {
+  position: absolute; display: block; aspect-ratio: 2948/3201;
+  background-image: url('../圖片/骰子/骰子六面圖v0.3.png'); background-size: 300% 200%; background-repeat: no-repeat;
+  filter: drop-shadow(0 16px 10px rgba(0,0,0,.42)); transform-origin: 50% 57%;
+  transform: translate(-50%,-50%); opacity: 0;
+}
+.face-1 { background-position: 0% 0%; } .face-2 { background-position: 50% 0%; } .face-3 { background-position: 100% 0%; }
+.face-4 { background-position: 0% 100%; } .face-5 { background-position: 50% 100%; } .face-6 { background-position: 100% 100%; }
+#dice small { display: block; margin-top: 10px; color: #FFD54A; font: 700 15px var(--ui); letter-spacing: .06em; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+.dice-1 .die { width: 205px; } .dice-2 .die { width: 180px; } .dice-3 .die { width: 160px; } .dice-5 .die { width: 135px; }
+#dice.rolling .die { animation-duration: .8s; animation-timing-function: cubic-bezier(.15,.8,.25,1); animation-fill-mode: both; }
+.die.t1 { animation-name: diceThrow1; } .die.t2 { animation-name: diceThrow2; } .die.t3 { animation-name: diceThrow3; }
+.die.t4 { animation-name: diceThrow4; } .die.t5 { animation-name: diceThrow5; }
+#dice.settled .die { animation: diceLand .28s cubic-bezier(.2,1.5,.45,1) both; }
+#dice.await-key small { color: #FFD54A; animation: none; }
+#dice.fading { opacity: 0; transform: translate(-50%,-50%) scale(.93); transition: opacity .5s ease, transform .5s ease; }
+@keyframes diceThrow1 { 0%{opacity:0;transform:translate(-300%,-300%) scale(.22) rotate(-250deg)} 12%{opacity:1} 42%{transform:translate(-185%,-188%) scale(.62) rotate(105deg)} 68%{transform:translate(-96%,-84%) scale(1.13) rotate(440deg)} 84%{transform:translate(-57%,-43%) scale(.91) rotate(620deg)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(720deg)} }
+@keyframes diceThrow2 { 0%{opacity:0;transform:translate(-290%,-325%) scale(.18) rotate(220deg)} 12%{opacity:1} 43%{transform:translate(-174%,-196%) scale(.60) rotate(-130deg)} 68%{transform:translate(-90%,-88%) scale(1.14) rotate(-455deg)} 84%{transform:translate(-54%,-45%) scale(.90) rotate(-640deg)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(-720deg)} }
+@keyframes diceThrow3 { 0%{opacity:0;transform:translate(-335%,-280%) scale(.18) rotate(-240deg)} 13%{opacity:1} 43%{transform:translate(-202%,-176%) scale(.58) rotate(135deg)} 68%{transform:translate(-105%,-79%) scale(1.08) rotate(455deg)} 84%{transform:translate(-55%,-44%) scale(.91) rotate(635deg)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(720deg)} }
+@keyframes diceThrow4 { 0%{opacity:0;transform:translate(-275%,-340%) scale(.20) rotate(220deg)} 12%{opacity:1} 45%{transform:translate(-165%,-203%) scale(.61) rotate(-120deg)} 69%{transform:translate(-86%,-89%) scale(1.10) rotate(-430deg)} 85%{transform:translate(-55%,-45%) scale(.91) rotate(-620deg)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(-720deg)} }
+@keyframes diceThrow5 { 0%{opacity:0;transform:translate(-320%,-318%) scale(.18) rotate(-270deg)} 12%{opacity:1} 43%{transform:translate(-195%,-195%) scale(.59) rotate(120deg)} 69%{transform:translate(-99%,-88%) scale(1.10) rotate(455deg)} 85%{transform:translate(-55%,-45%) scale(.90) rotate(635deg)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(720deg)} }
+@keyframes diceLand { from { opacity:1; filter:brightness(1.45) drop-shadow(0 22px 16px rgba(0,0,0,.55)); transform:translate(-50%,-50%) translateY(-5px) scale(1.08); } to { opacity:1; filter:drop-shadow(0 16px 10px rgba(0,0,0,.42)); transform:translate(-50%,-50%) translateY(0) scale(1); } }
+.total {
+  position: fixed; z-index: 7; left: 50%; top: 24%; transform: translateX(-50%);
+  padding: .35em 1.1em; border: 3px solid #fff3b4; border-radius: 99px; background: #10314bE6;
+  color: var(--gold); font-weight: 900; font-size: clamp(19px, 3vw, 40px); letter-spacing: .08em;
+  opacity: 0; white-space: nowrap; transition: opacity .25s;
+}
+.total.show { opacity: 1; }
+
+/* ── 以下是模擬器自己的控制面板，遊戲裡沒有這一段 ───────────────── */
+#ctl { position: fixed; z-index: 20; top: 12px; right: 12px; width: 260px; max-height: calc(100vh - 24px); overflow: auto;
+  background: #101f2ee8; border: 1px solid #2c4a68; border-radius: 12px; padding: 13px; color: #e8edf3; backdrop-filter: blur(7px); }
+#ctl h2 { margin: 0 0 4px; font-size: 14px; color: #F0A020; letter-spacing: .05em; }
+#ctl .sub { font-size: 11px; color: #7f9ab3; line-height: 1.6; margin-bottom: 10px; }
+#ctl .lbl { font-size: 11px; color: #8fa9c0; margin: 11px 0 5px; letter-spacing: .05em; }
+.trow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.tbtn { font-family: inherit; font-size: 13px; padding: 8px 4px; border-radius: 7px; cursor: pointer; text-align: center;
+  background: linear-gradient(#355f77,#1b374b); border: 2px solid #5fa1c2; color: #fff; }
+.tbtn:hover { border-color: #ffe27d; }
+.tbtn.on { background: linear-gradient(#ffd560,#f4a51b); border-color: #fff2b7; color: #3a2400; font-weight: 800; }
+#ctl button.act { width: 100%; margin-top: 9px; font-family: inherit; font-size: 12.5px; padding: 8px; border-radius: 8px; cursor: pointer;
+  background: linear-gradient(#355f77,#1b374b); border: 2px solid #5fa1c2; color: #fff; }
+#ctl button.act:hover { border-color: #ffe27d; }
+.hint { position: fixed; z-index: 20; right: 18px; bottom: 15px; color: #d1e6f4; font-size: 13px; font-weight: 700; text-shadow: 0 2px 5px #000a; }
+@media (max-width: 700px) { #ctl { width: 210px; } .hint { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+<div class="scrim"></div>
+<header><h1>🎲 立體擲骰</h1><p>正式遊戲畫面 ＋ 正式擲骰動畫</p></header>
+<div id="dice"></div>
+<div class="total" id="total"></div>
+<span class="hint">空白鍵也可以擲骰</span>
+
+<aside id="ctl">
+  <h2>擲骰動畫模擬 v1.1</h2>
+  <div class="sub">背景是共用棋盤 canvas（跟遊戲一樣的 map_data.js／render.js 畫出來），骰子的 DOM／CSS／散落位置表原封不動照抄自正式遊戲的 showDice()，1/2/3/5 顆都支援。</div>
+
+  <div class="lbl">骰子數量</div>
+  <div class="trow" id="countBtns">
+    <div class="tbtn" data-n="1">1 顆</div>
+    <div class="tbtn on" data-n="2">2 顆</div>
+    <div class="tbtn" data-n="3">3 顆</div>
+    <div class="tbtn" data-n="5">5 顆</div>
+  </div>
+
+  <button class="act" id="roll">🎲 擲骰看看</button>
+  <button class="act" id="relocate">🗺 換一個場景</button>
+</aside>
+
+<script src="map_data.js"></script>
+<script src="src/data.js"></script>
+<script>window.Game = {players: [], cur: 0, state: 'awaitRoll', month: 6, destination: null, curPlayer() { return this.players[0]; }};</script>
+<script src="src/render-v1.28.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+Data.load();
+Render.init($('bg-canvas'));
+Render.freeLook = true;
+
+const RUN_STATIONS = ['tr_taipei', 'tr_taichung', 'tr_tainan', 'tr_kaohsiung', 'tr_hualien'];
+function relocate() {
+  const ids = [...Data.stations.keys()].filter(id => !Data.isTile(id));
+  const pick = RUN_STATIONS[Math.floor(Math.random() * RUN_STATIONS.length)];
+  const st = Data.stations.get(pick) || Data.stations.get(ids[Math.floor(Math.random() * ids.length)]);
+  Render.cam.x = Render.cam.tx = st.x;
+  Render.cam.y = Render.cam.ty = st.y;
+  Render.cam.scale = Render.cam.tscale = Render.ZOOM_NEAR;
+}
+relocate();
+$('relocate').onclick = relocate;
+
+// ── 骰子邏輯：原封不動照抄正式遊戲 ui.js 的 DICE_DEPTH_Y／DICE_LAYOUTS／
+// shuffleDice／showDice()，只是拿掉跟 Game.curPlayer().isAI 有關的分支
+// （模擬器沒有真人／電腦玩家的區別，一律等按鍵才收起骰子）。
+const DICE_DEPTH_Y = [34, 54, 74];
+const DICE_LAYOUTS = {
+  1: [{x: 72, depth: 1}],
+  2: [{x: 58, depth: 0}, {x: 72, depth: 2}],
+  3: [{x: 45, depth: 0}, {x: 70, depth: 1}, {x: 58, depth: 2}],
+  5: [{x: 43, depth: 0}, {x: 70, depth: 0}, {x: 55, depth: 1}, {x: 78, depth: 1}, {x: 66, depth: 2}],
+};
+function shuffleDice(a) { return a.map(v => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(([, v]) => v); }
+
+let count = 2, busy = false, diceTicker = null, diceDone = null, diceFade = null, awaiting = false;
+document.querySelectorAll('#countBtns .tbtn').forEach(btn => btn.onclick = () => {
+  if (busy) return;
+  document.querySelectorAll('#countBtns .tbtn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  count = +btn.dataset.n;
+});
+
+function showDice(finalValues, total) {
+  const el = $('dice');
+  const n = finalValues.length;
+  const layout = DICE_LAYOUTS[n] || DICE_LAYOUTS[1];
+  const spots = shuffleDice(layout)
+    .map(spot => ({...spot, x: Math.max(8, Math.min(92, spot.x + (Math.random() * 6 - 3)))}))
+    .sort((a, b) => a.depth - b.depth);
+  const throwClasses = shuffleDice(['t1', 't2', 't3', 't4', 't5']);
+  const render = values => {
+    const cup = document.createElement('div');
+    cup.className = `dice-cup dice-${n}`;
+    spots.forEach((spot, i) => {
+      const die = document.createElement('span');
+      die.className = `die face-${values[i]} ${throwClasses[i % throwClasses.length]}`;
+      die.style.left = spot.x + '%';
+      die.style.top = DICE_DEPTH_Y[spot.depth] + '%';
+      die.style.zIndex = String(spot.depth + 1);
+      cup.appendChild(die);
+    });
+    el.replaceChildren(cup);
+  };
+  const showFaces = values => el.querySelectorAll('.die').forEach((die, i) => {
+    die.className = die.className.replace(/face-\d+/, `face-${values[i]}`);
+  });
+  clearInterval(diceTicker); clearTimeout(diceDone);
+  render(finalValues.map(() => 1 + Math.floor(Math.random() * 6)));
+  el.className = 'show rolling';
+  $('total').classList.remove('show');
+  diceTicker = setInterval(() => showFaces(finalValues.map(() => 1 + Math.floor(Math.random() * 6))), 85);
+  diceDone = setTimeout(() => {
+    clearInterval(diceTicker);
+    showFaces(finalValues);
+    el.classList.remove('rolling'); el.classList.add('settled', 'await-key');
+    $('total').textContent = `🎲 擲出 ${total} 點！`;
+    $('total').classList.add('show');
+    awaiting = true;
+  }, 800);
+}
+function dismissDice() {
+  if (!awaiting) return;
+  awaiting = false;
+  const el = $('dice');
+  el.classList.remove('await-key');
+  el.classList.add('fading');
+  $('total').classList.remove('show');
+  clearTimeout(diceFade);
+  diceFade = setTimeout(() => { el.className = ''; busy = false; }, 500);
+}
+function roll() {
+  if (busy) return;
+  if (awaiting) { dismissDice(); return; }
+  busy = true;
+  const values = Array.from({length: count}, () => 1 + Math.floor(Math.random() * 6));
+  const total = values.reduce((a, b) => a + b, 0);
+  showDice(values, total);
+}
+$('roll').onclick = roll;
+addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); roll(); } });
+</script>
+</body>
+</html>

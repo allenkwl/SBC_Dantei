@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小球貓電鐵 v0.88 — Phase 3</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #0C1A28; --panel: #172B40cc; --rim: #254663;
+    --amber: #F0A020; --text: #D4E6F4; --lo: #5E84A4;
+    --ui: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  }
+  html, body { width:100%; height:100%; overflow:hidden; background:var(--navy); font-family:var(--ui); color:var(--text); }
+  #game { position:fixed; inset:0; width:100%; height:100%; display:block; cursor:grab; }
+
+  /* HUD 左上：月曆 + 玩家 */
+  #hud {
+    position:fixed; top:14px; left:14px; z-index:10;
+    background:var(--panel); border:1px solid var(--rim); border-radius:10px;
+    padding:12px 14px; backdrop-filter:blur(6px); min-width:200px;
+  }
+  #calendar { font-size:15px; font-weight:700; color:var(--amber); letter-spacing:.08em; margin-bottom:8px; }
+  /* HUD 只顯示「輪到的那位玩家」，頭像跟字都放大，其他人資訊不顯示 */
+  .p-row-cur { display:flex; align-items:center; gap:12px; }
+  .p-row-cur .avatar-cur { width:56px; height:56px; border-radius:50%; border:2.5px solid var(--amber); flex-shrink:0; object-fit:cover; }
+  .p-row-cur .dot-cur { width:40px; height:40px; border-radius:50%; border:2.5px solid var(--amber); flex-shrink:0; }
+  .p-cur-name { font-size:19px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:6px; }
+  .p-cur-name .ai-tag {
+    font-size:11px; font-weight:700; color:#20150a; background:var(--amber);
+    border-radius:5px; padding:2px 6px; letter-spacing:.03em;
+  }
+  .p-cur-money { color:#FFD54A; font-size:16px; font-weight:700; margin-top:3px; }
+  .p-cur-loc { color:var(--lo); font-size:13px; margin-top:2px; }
+
+  /* 控制列：左下三顆立體按鈕 */
+  #controls {
+    position:fixed; bottom:20px; left:20px; z-index:10;
+    display:flex; align-items:center; gap:12px;
+  }
+  #btn-roll, #btn-cards, #btn-zoom {
+    border:none; cursor:pointer; font-family:var(--ui); transition:transform .08s, box-shadow .08s;
+  }
+  #btn-roll:active:not(:disabled), #btn-cards:active:not(:disabled), #btn-zoom:active:not(:disabled) { transform:translateY(4px); }
+  #btn-roll {
+    height:52px; padding:0 30px; font-size:18px; font-weight:700;
+    background:#FFF8EC; color:#20150a; border-radius:26px;
+    box-shadow:0 4px 0 #C7BEAA, 0 4px 16px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  #btn-roll:active:not(:disabled) { box-shadow:0 0 0 #C7BEAA, 0 2px 8px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.9); }
+  #btn-roll:disabled { opacity:.35; cursor:default; }
+  #btn-cards { height:52px; padding:0 22px; font-size:16px; font-weight:700; background:var(--amber); color:#20150a; border-radius:26px; box-shadow:0 4px 0 #B8790F, 0 4px 16px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.5); }
+  #btn-cards:active:not(:disabled) { box-shadow:0 0 0 #B8790F, 0 2px 8px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.5); }
+  #btn-cards:disabled { opacity:.35; cursor:default; }
+  #btn-zoom {
+    height:44px; padding:0 16px; font-size:13px; background:var(--panel); color:var(--text); border-radius:22px;
+    box-shadow:0 4px 0 #08131e, 0 4px 14px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  #btn-zoom:active { box-shadow:0 0 0 #08131e, 0 2px 6px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.08); }
+
+  /* 骰子動畫：使用六面立體骰子圖，先飛出翻滾，再落地結算。 */
+  #dice {
+    /* 落點在畫面右下；骰子本身的 keyframes 由左上斜向翻滾到這個位置。 */
+    position:fixed; top:63%; left:72%; transform:translate(-50%,-50%) scale(.4);
+    z-index:20; opacity:0; pointer-events:none;
+    transition:all .22s cubic-bezier(.2,1.6,.4,1); text-align:center;
+  }
+  #dice.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  .dice-cup { display:flex; justify-content:center; align-items:center; min-width:100px; }
+  .die { display:block; width:180px; aspect-ratio:2948/3201; background-image:url('../圖片/骰子/骰子六面圖v0.3.png'); background-size:300% 200%; background-repeat:no-repeat; filter:drop-shadow(0 16px 10px rgba(0,0,0,.42)); transform-origin:50% 57%; }
+  .face-1 { background-position:0% 0%; }.face-2 { background-position:50% 0%; }.face-3 { background-position:100% 0%; }.face-4 { background-position:0% 100%; }.face-5 { background-position:50% 100%; }.face-6 { background-position:100% 100%; }
+  #dice small { display:block; margin-top:10px; color:#FFD54A; font:700 15px var(--ui); letter-spacing:.06em; text-shadow:0 2px 8px rgba(0,0,0,.6); }
+  .dice-1 .die { width:205px; }.dice-2 { gap:0; }.dice-2 .die { width:170px; margin:0 -18px; }.dice-5 { gap:0; }.dice-5 .die { width:95px; margin:0 -19px; }.dice-5 .die:first-child { margin-left:0; }.dice-5 .die:last-child { margin-right:0; }
+  #dice.rolling .die { animation:diceThrow .8s cubic-bezier(.15,.8,.25,1) both; }.dice-2 .die:nth-child(2) { animation-name:diceThrowB; }.dice-5 .die:nth-child(2),.dice-5 .die:nth-child(4) { animation-delay:.05s; }.dice-5 .die:nth-child(3) { animation-delay:.1s; }
+  #dice.settled .die { animation:diceLand .28s cubic-bezier(.2,1.5,.45,1) both; }
+  #dice.await-key small { color:#FFD54A; animation:none; }
+  #dice.fading { opacity:0; transform:translate(-50%,-50%) scale(.93); transition:opacity .5s ease,transform .5s ease; }
+  @keyframes diceContinuePulse { 50% { transform:scale(1.06); } }
+  /* 比照擲骰模擬：從畫面左上飛出，向右下翻滾，最後落在各自的結果位置。 */
+  @keyframes diceThrow { 0%{opacity:0;transform:translate(-300%,-300%) scale(.22) rotate(-250deg)} 12%{opacity:1} 42%{transform:translate(-185%,-188%) scale(.62) rotate(105deg)} 68%{transform:translate(-96%,-84%) scale(1.13) rotate(440deg)} 84%{transform:translate(-57%,-43%) scale(.91) rotate(620deg)} 100%{opacity:1;transform:translate(0) scale(1) rotate(720deg)} }
+  @keyframes diceThrowB { 0%{opacity:0;transform:translate(-290%,-325%) scale(.18) rotate(220deg)} 12%{opacity:1} 43%{transform:translate(-174%,-196%) scale(.60) rotate(-130deg)} 68%{transform:translate(-90%,-88%) scale(1.14) rotate(-455deg)} 84%{transform:translate(-54%,-45%) scale(.90) rotate(-640deg)} 100%{opacity:1;transform:translate(0) scale(1) rotate(-720deg)} }
+  @keyframes diceLand { from { filter:brightness(1.45) drop-shadow(0 22px 16px rgba(0,0,0,.55)); transform:translateY(-5px) scale(1.08); } to { filter:drop-shadow(0 16px 10px rgba(0,0,0,.42)); transform:translateY(0) scale(1); } }
+
+  /* 岔路箭頭 */
+  #branch-layer { position:fixed; inset:0; z-index:15; pointer-events:none; }
+  .branch-btn {
+    position:absolute; width:44px; height:44px; border-radius:50%; pointer-events:auto;
+    background:var(--amber); color:#20150a; border:2px solid #fff; cursor:pointer;
+    font-size:20px; display:flex; align-items:center; justify-content:center;
+    transform:rotate(var(--ang)); box-shadow:0 3px 12px rgba(0,0,0,.5);
+    animation:pulse 1s infinite alternate;
+  }
+  @keyframes pulse { from{box-shadow:0 0 0 0 rgba(240,160,32,.7);} to{box-shadow:0 0 0 12px rgba(240,160,32,0);} }
+  .branch-btn.green-btn {
+    background:#22C55E !important; color:#08290f; border-color:#fff;
+    animation:pulse-green 1s infinite alternate;
+  }
+  @keyframes pulse-green { from{box-shadow:0 0 0 0 rgba(34,197,94,.7);} to{box-shadow:0 0 0 12px rgba(34,197,94,0);} }
+
+  /* 提示 */
+  #toast {
+    position:fixed; bottom:92px; left:50%; transform:translateX(-50%) translateY(16px); z-index:20;
+    background:var(--panel); border:1px solid var(--rim); color:var(--text);
+    padding:10px 22px; border-radius:22px; font-size:14px; opacity:0; transition:all .25s;
+    backdrop-filter:blur(6px); white-space:nowrap;
+  }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* 小地圖 */
+  #minimap {
+    position:fixed; right:14px; bottom:14px; z-index:10;
+    border:1px solid var(--rim); border-radius:8px; background:rgba(17,38,59,.8);
+    backdrop-filter:blur(6px);
+  }
+
+  /* 靜音切換：固定在右上角，開場／選人數／遊戲中都看得到。
+     設定（齒輪）內容（查資產、延長年數）只有遊戲開始後才有意義，預設隱藏，開局才顯示 */
+  #btn-mute, #btn-settings {
+    position:fixed; top:14px; z-index:70;
+    width:40px; height:40px; border-radius:50%; cursor:pointer;
+    background:var(--panel); border:1px solid var(--rim); color:var(--text);
+    font-size:17px; align-items:center; justify-content:center;
+    backdrop-filter:blur(6px);
+  }
+  #btn-mute { right:14px; display:flex; }
+  #btn-settings { right:62px; display:none; }
+  #btn-settings.show { display:flex; }
+  #btn-mute:hover, #btn-settings:hover { border-color:var(--amber); }
+
+  /* 開場：純畫面，無選單。按任意鍵／點滑鼠 1 秒後進入人數選擇畫面 */
+  #splash {
+    position:fixed; inset:0; z-index:55; overflow:hidden; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #splash-bg {
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    filter:brightness(.6); z-index:0;
+  }
+  #splash .splash-title {
+    position:absolute; z-index:1; top:36px; right:44px; text-align:right;
+    text-shadow:0 4px 20px rgba(0,0,0,.8), 0 0 4px rgba(0,0,0,.9);
+  }
+  #splash .splash-title h1 {
+    font-size:88px; color:var(--amber); letter-spacing:.1em; font-weight:900;
+  }
+  #splash .splash-title .subtitle {
+    color:#fff; font-size:20px; font-weight:600; margin-top:14px; letter-spacing:.06em;
+  }
+  #splash .splash-hint {
+    position:absolute; bottom:30px; left:50%; transform:translateX(-50%); z-index:1;
+    font-size:13px; color:rgba(255,255,255,.8); text-shadow:0 1px 4px rgba(0,0,0,.8);
+    animation:hintPulse 1.6s infinite alternate;
+  }
+  @keyframes hintPulse { from{opacity:.5;} to{opacity:1;} }
+  #splash-version {
+    position:absolute; left:16px; bottom:12px; z-index:1;
+    font-size:13px; color:rgba(255,255,255,.85); font-family:Menlo, monospace;
+    text-shadow:0 1px 4px rgba(0,0,0,.8);
+  }
+
+  /* 序章短片：沿用遊戲現有角色與交通工具素材，結束後才進入選人數 */
+  #intro {
+    position:fixed; inset:0; z-index:56; display:none; overflow:hidden;
+    align-items:center; justify-content:center; background:#08131e; cursor:default;
+  }
+  #intro.playing { display:flex; }
+  .intro-scene { position:absolute; inset:0; display:none; overflow:hidden; }
+  .intro-scene.active { display:block; animation:introScene .55s ease both; }
+  @keyframes introScene { from { opacity:0; transform:scale(1.025); } to { opacity:1; transform:scale(1); } }
+  .intro-bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; filter:brightness(.55) saturate(1.08); }
+  .intro-shade { position:absolute; inset:0; background:linear-gradient(90deg,rgba(6,18,31,.82),rgba(6,18,31,.12) 58%,rgba(6,18,31,.68)); }
+  .intro-copy { position:absolute; z-index:2; left:8vw; top:15vh; max-width:min(610px,62vw); color:white; text-shadow:0 3px 14px rgba(0,0,0,.8); }
+  .intro-kicker { color:var(--amber); font-size:clamp(14px,1.7vw,23px); font-weight:800; letter-spacing:.12em; margin-bottom:12px; }
+  .intro-copy h2 { font-size:clamp(34px,5.2vw,76px); line-height:1.15; letter-spacing:.06em; }
+  .intro-copy p { margin-top:18px; font-size:clamp(16px,2vw,27px); line-height:1.6; color:#e7f3fb; }
+  .intro-cats { position:absolute; z-index:1; right:3vw; bottom:-3vh; height:min(64vh,620px); width:min(70vw,1100px); }
+  .intro-cat { position:absolute; bottom:0; width:33%; height:auto; max-width:none; object-fit:contain; filter:drop-shadow(0 12px 16px rgba(0,0,0,.48)); animation:catBob 1.8s ease-in-out infinite alternate; }
+  .intro-cat:nth-child(1) { left:0; transform:rotate(-4deg); }
+  .intro-cat:nth-child(2) { left:23%; width:35%; animation-delay:-.7s; }
+  .intro-cat:nth-child(3) { left:47%; width:34%; animation-delay:-1.1s; }
+  .intro-cat:nth-child(4) { left:69%; transform:rotate(4deg); animation-delay:-.3s; }
+  @keyframes catBob { to { translate:0 -13px; } }
+  .intro-vehicle { position:absolute; z-index:1; bottom:12vh; right:8vw; width:min(58vw,760px); filter:drop-shadow(0 14px 14px rgba(0,0,0,.52)); animation:vehiclePass 5.4s linear infinite; }
+  @keyframes vehiclePass { from { transform:translateX(35vw); } to { transform:translateX(-84vw); } }
+  .intro-plane { animation:planePass 5.4s linear infinite; }
+  @keyframes planePass { from { transform:translateX(35vw) rotate(-90deg); } to { transform:translateX(-84vw) rotate(-90deg); } }
+  .intro-money { position:absolute; z-index:1; right:8vw; top:16vh; color:#ffe16b; font-size:clamp(46px,8vw,126px); font-weight:900; text-shadow:0 4px 18px rgba(0,0,0,.65); animation:moneyPop 1.2s ease-in-out infinite alternate; }
+  @keyframes moneyPop { to { transform:scale(1.08) rotate(-3deg); } }
+  #intro-skip { position:absolute; z-index:5; right:20px; bottom:18px; padding:10px 18px; border:1px solid rgba(255,255,255,.5); border-radius:22px; background:rgba(8,22,36,.7); color:#fff; font:600 14px var(--ui); cursor:pointer; }
+  #intro-skip:hover { border-color:var(--amber); color:var(--amber); }
+  #intro-progress { position:absolute; z-index:5; left:0; bottom:0; width:0; height:4px; background:var(--amber); transition:width .12s linear; }
+  @media (max-width:700px) {
+    .intro-copy { left:7vw; top:12vh; max-width:85vw; }
+    .intro-cats { opacity:.63; right:-15vw; width:110vw; }
+    .intro-vehicle { width:105vw; right:-2vw; bottom:18vh; }
+  }
+
+  /* 人數選擇畫面 */
+  #setup {
+    position:fixed; inset:0; z-index:50; overflow:hidden; display:none;
+    flex-direction:column; align-items:center; justify-content:center; gap:18px;
+    background:#0C1A28;
+  }
+  #setup-bg {
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    filter:brightness(.62); z-index:0;
+  }
+  #setup::after {
+    content:''; position:absolute; inset:0; z-index:0;
+    background:linear-gradient(180deg, rgba(12,26,40,.25) 0%, rgba(12,26,40,.35) 55%, rgba(12,26,40,.75) 100%);
+  }
+  #setup .row { position:relative; z-index:1; display:flex; gap:14px; }
+  #setup h2 { position:relative; z-index:1; color:var(--text); font-size:18px; letter-spacing:.06em; margin-bottom:4px; }
+  .n-btn {
+    width:96px; height:96px; font-size:17px; font-weight:700; font-family:var(--ui);
+    background:var(--panel); color:var(--text); border:2px solid var(--rim); border-radius:14px; cursor:pointer;
+    transition:all .15s;
+  }
+  .n-btn:hover { border-color:var(--amber); color:var(--amber); transform:translateY(-4px); }
+  #setup .hint { position:relative; z-index:1; font-size:12px; color:var(--lo); margin-top:14px; }
+
+  /* 玩家設定畫面：改名字、選真人／電腦難度 */
+  #roster {
+    position:fixed; inset:0; z-index:51; overflow:hidden; display:none;
+    flex-direction:column; align-items:center; justify-content:center; gap:16px;
+    background:#0C1A28;
+  }
+  #roster-bg {
+    position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+    filter:brightness(.5); z-index:0;
+  }
+  #roster::after {
+    content:''; position:absolute; inset:0; z-index:0;
+    background:linear-gradient(180deg, rgba(12,26,40,.3) 0%, rgba(12,26,40,.4) 55%, rgba(12,26,40,.8) 100%);
+  }
+  #roster h2 { position:relative; z-index:1; color:var(--text); font-size:18px; letter-spacing:.06em; }
+  #roster-list { position:relative; z-index:1; display:flex; flex-direction:column; gap:10px; }
+  .roster-row {
+    display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--rim);
+    border-radius:10px; padding:8px 12px; backdrop-filter:blur(6px);
+  }
+  .roster-avatar-picker { display:flex; gap:4px; }
+  .roster-avatar-opt {
+    width:32px; height:32px; border-radius:50%; object-fit:cover; border:2px solid var(--rim);
+    cursor:pointer; opacity:.55; transition:all .12s;
+  }
+  .roster-avatar-opt:hover { opacity:.85; }
+  .roster-avatar-opt.selected { border-color:var(--amber); opacity:1; box-shadow:0 0 0 2px rgba(240,160,32,.35); }
+  .roster-name {
+    width:110px; height:32px; background:var(--navy); border:1px solid var(--rim); color:var(--text);
+    font-family:var(--ui); font-size:13px; padding:0 8px; border-radius:6px; outline:none;
+  }
+  .roster-name:focus { border-color:var(--amber); }
+  .roster-mode {
+    height:32px; background:var(--navy); border:1px solid var(--rim); color:var(--text);
+    font-family:var(--ui); font-size:12.5px; padding:0 6px; border-radius:6px; outline:none;
+  }
+  .roster-years {
+    position:relative; z-index:1; display:flex; align-items:center; gap:8px;
+    font-size:13px; color:var(--text);
+  }
+  .roster-years select {
+    height:32px; background:var(--navy); border:1px solid var(--rim); color:var(--text);
+    font-family:var(--ui); font-size:12.5px; padding:0 8px; border-radius:6px; outline:none;
+  }
+  .roster-quickwin {
+    position:relative; z-index:1; display:flex; align-items:center; gap:8px;
+    font-size:13px; color:var(--text);
+  }
+  .roster-quickwin input[type="number"] {
+    width:70px; height:28px; background:var(--navy); border:1px solid var(--rim); color:var(--text);
+    font-family:var(--ui); font-size:12.5px; padding:0 8px; border-radius:6px; outline:none;
+  }
+  #roster-start {
+    position:relative; z-index:1; height:46px; padding:0 30px; font-size:15px; font-weight:700; font-family:var(--ui);
+    background:var(--amber); color:#20150a; border:none; border-radius:23px; cursor:pointer; margin-top:4px;
+  }
+  #roster-start:hover { transform:scale(1.04); }
+  #roster .hint { position:relative; z-index:1; font-size:12px; color:var(--lo); }
+
+  /* 自製確認視窗：取代原生 confirm()，原生對話框會讓瀏覽器跳出全螢幕模式 */
+  #confirm-modal {
+    position:fixed; inset:0; z-index:80; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(12,26,40,.6); backdrop-filter:blur(3px);
+  }
+  .cm-card {
+    background:var(--panel); border:1px solid var(--rim); border-radius:14px;
+    padding:22px 26px; min-width:280px; max-width:360px;
+    display:flex; flex-direction:column; gap:14px; backdrop-filter:blur(6px);
+  }
+  .cm-card p { font-size:14px; color:var(--text); line-height:1.5; }
+  .cm-actions { display:flex; gap:10px; }
+  .cm-actions button {
+    flex:1; height:42px; font-size:13.5px; font-weight:700; font-family:var(--ui);
+    border-radius:21px; cursor:pointer;
+  }
+  #cm-cancel { background:transparent; color:var(--lo); border:1px solid var(--rim); }
+  #cm-ok { background:var(--amber); color:#20150a; border:none; }
+  #cm-cancel:hover { border-color:var(--amber); color:var(--text); }
+  #cm-ok:hover { transform:scale(1.03); }
+
+  /* 遊戲結束結算畫面 */
+  #gameover {
+    position:fixed; inset:0; z-index:66; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(12,26,40,.65); backdrop-filter:blur(4px);
+  }
+  .go-card {
+    background:var(--panel); border:1px solid var(--rim); border-radius:14px;
+    padding:26px 30px; min-width:300px; max-width:380px;
+    display:flex; flex-direction:column; gap:10px; backdrop-filter:blur(6px);
+  }
+  .go-card h2 { color:var(--amber); font-size:17px; font-weight:700; margin-bottom:4px; text-align:center; }
+  .go-row {
+    display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px;
+    background:#1C3450; border:1.5px solid var(--rim);
+  }
+  .go-row.go-first { border-color:var(--amber); background:rgba(240,160,32,.14); }
+  .go-rank-num { font-size:15px; font-weight:900; color:var(--lo); width:18px; }
+  .go-row.go-first .go-rank-num { color:var(--amber); }
+  .go-avatar { width:32px; height:32px; border-radius:50%; object-fit:cover; border:1.5px solid #fff; }
+  .go-total { margin-left:auto; color:#FFD54A; font-weight:700; font-size:14px; }
+  #go-restart, #go-extend {
+    margin-top:6px; height:44px; font-size:14px; font-weight:700; font-family:var(--ui);
+    background:var(--amber); color:#20150a; border:none; border-radius:22px; cursor:pointer;
+  }
+  #go-extend { background:transparent; border:1.5px solid var(--amber); color:var(--amber); }
+  #go-restart:hover, #go-extend:hover { transform:scale(1.03); }
+
+  /* 存檔按鈕（人數選擇畫面） */
+  .load-save-btn {
+    position:relative; z-index:1; margin-top:8px; height:40px; padding:0 20px; font-size:13px; font-family:var(--ui);
+    background:var(--panel); color:var(--text); border:1px solid var(--rim); border-radius:20px; cursor:pointer;
+  }
+  .load-save-btn:hover { border-color:var(--amber); }
+
+  /* 設定選單（齒輪點開）：查自己的資產、音效、延長年數 */
+  #settings-menu {
+    position:fixed; inset:0; z-index:69; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(12,26,40,.55); backdrop-filter:blur(3px);
+  }
+  .cfg-card {
+    background:var(--panel); border:1px solid var(--rim); border-radius:14px;
+    padding:22px 26px; min-width:280px; max-width:340px;
+    display:flex; flex-direction:column; gap:12px; backdrop-filter:blur(6px);
+  }
+  .cfg-card h2 { color:var(--amber); font-size:16px; font-weight:700; text-align:center; }
+  .cfg-label { font-size:11px; font-weight:600; letter-spacing:.06em; color:var(--lo); text-transform:uppercase; }
+  .cfg-assets-player {
+    display:flex; align-items:center; gap:8px; background:#1C3450; border:1.5px solid var(--rim);
+    border-radius:8px; padding:8px 10px; margin-top:4px;
+  }
+  .cfg-assets-player img { width:30px; height:30px; border-radius:50%; object-fit:cover; }
+  .cfg-assets-money { margin-left:auto; color:#FFD54A; font-weight:700; font-size:13px; }
+  .cfg-assets-stalls { font-size:11.5px; color:var(--lo); margin-top:4px; line-height:1.5; }
+  #cfg-mute-toggle, #cfg-extend, #cfg-close {
+    height:42px; font-size:13.5px; font-weight:700; font-family:var(--ui); border-radius:21px; cursor:pointer;
+  }
+  #cfg-mute-toggle, #cfg-extend {
+    background:transparent; border:1.5px solid var(--rim); color:var(--text);
+  }
+  #cfg-mute-toggle:hover, #cfg-extend:hover { border-color:var(--amber); }
+  #cfg-close { background:var(--amber); color:#20150a; border:none; }
+  #cfg-close:hover { transform:scale(1.03); }
+
+  /* 延長年數小視窗 */
+  #extend-years {
+    position:fixed; inset:0; z-index:67; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(12,26,40,.55); backdrop-filter:blur(3px);
+  }
+  .ey-card {
+    background:var(--panel); border:1px solid var(--rim); border-radius:14px;
+    padding:22px 26px; min-width:260px;
+    display:flex; flex-direction:column; gap:10px; backdrop-filter:blur(6px);
+  }
+  .ey-card h3 { color:var(--amber); font-size:15px; font-weight:700; }
+  .ey-cur { font-size:12.5px; color:var(--lo); }
+  .ey-row { display:flex; align-items:center; gap:8px; font-size:14px; }
+  .ey-row input {
+    width:70px; height:32px; background:var(--navy); border:1px solid var(--rim); color:var(--text);
+    font-family:var(--ui); font-size:14px; padding:0 8px; border-radius:6px; outline:none; text-align:center;
+  }
+  #ey-confirm, #ey-cancel {
+    height:38px; font-size:13px; font-weight:700; font-family:var(--ui); border-radius:19px; cursor:pointer;
+  }
+  #ey-confirm { background:var(--amber); color:#20150a; border:none; }
+  #ey-cancel { background:transparent; color:var(--lo); border:1px solid var(--rim); }
+
+  /* 存檔選位／存檔詳細畫面（10 個檔案匣，仿桃鐵） */
+  #save-slots, #save-detail {
+    position:fixed; inset:0; z-index:68; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(12,26,40,.7); backdrop-filter:blur(4px);
+  }
+  .ss-slots-card, .sd-card {
+    background:var(--panel); border:1px solid var(--rim); border-radius:14px;
+    padding:24px 28px; min-width:320px; max-width:420px; max-height:80vh; overflow-y:auto;
+    display:flex; flex-direction:column; gap:10px; backdrop-filter:blur(6px);
+  }
+  .ss-slots-card h2, .sd-card h2 { color:var(--amber); font-size:16px; font-weight:700; text-align:center; }
+  .save-slot {
+    display:flex; flex-direction:column; align-items:flex-start; gap:2px;
+    width:100%; padding:9px 12px; border-radius:8px; cursor:pointer; text-align:left;
+    background:#1C3450; border:1.5px solid var(--rim); color:var(--text); font-family:var(--ui);
+  }
+  .save-slot:hover { border-color:var(--amber); }
+  .save-slot-num { font-size:11px; color:var(--lo); font-weight:700; }
+  .save-slot-names { font-size:13.5px; font-weight:700; }
+  .save-slot-meta { font-size:11.5px; color:var(--lo); }
+  .save-slot-empty { font-size:12.5px; color:var(--lo); font-style:italic; }
+  #save-slots-back, #sd-back {
+    margin-top:6px; height:40px; font-size:13px; font-family:var(--ui);
+    background:transparent; color:var(--lo); border:1px solid var(--rim); border-radius:20px; cursor:pointer;
+  }
+  #sd-meta { font-size:12.5px; color:var(--lo); text-align:center; margin-top:-6px; }
+  .sd-player {
+    background:#1C3450; border:1.5px solid var(--rim); border-radius:8px; padding:8px 12px; font-size:13px;
+  }
+  .sd-player-head { display:flex; align-items:center; gap:8px; }
+  .sd-player-head img { width:26px; height:26px; border-radius:50%; object-fit:cover; }
+  .sd-player-mode {
+    height:28px; padding:0 22px 0 8px; border:1px solid var(--rim); border-radius:6px;
+    background:#102842; color:var(--text); font:700 12px var(--ui); cursor:pointer;
+  }
+  .sd-player-mode:focus { outline:2px solid var(--amber); outline-offset:1px; }
+  .sd-player-money { margin-left:auto; color:#FFD54A; font-weight:700; font-size:12.5px; }
+  .sd-player-stalls { font-size:11.5px; color:var(--lo); margin-top:4px; line-height:1.5; }
+  .sd-actions { display:flex; flex-direction:column; gap:6px; margin-top:4px; }
+  #sd-load {
+    height:42px; font-size:13.5px; font-weight:700; font-family:var(--ui);
+    background:var(--amber); color:#20150a; border:none; border-radius:21px; cursor:pointer;
+  }
+  #sd-delete {
+    height:38px; font-size:12.5px; font-family:var(--ui);
+    background:transparent; color:#E05050; border:1px solid #E05050; border-radius:19px; cursor:pointer;
+  }
+
+  /* 月份跳字：每月回合開始前，從右側滑入 → 中間停頓 → 往左滑出 */
+  #month-banner {
+    position:fixed; inset:0; z-index:60; overflow:hidden; pointer-events:none;
+    opacity:0; visibility:hidden;
+  }
+  #month-banner.playing { opacity:1; visibility:visible; }
+  #month-banner-img {
+    position:absolute; inset:0; width:100%; height:100%;
+    background-size:cover; background-position:center; filter:brightness(.5);
+    opacity:0; transition:opacity .2s;
+  }
+  #month-banner.playing #month-banner-img { opacity:1; }
+  .month-banner-text {
+    position:absolute; top:50%; left:50%;
+    transform:translate(120%, -50%);
+    font-size:56px; font-weight:900; color:#fff; white-space:nowrap;
+    -webkit-text-stroke:2px #d6336c; text-shadow:0 4px 18px rgba(0,0,0,.6);
+  }
+  #month-banner.playing .month-banner-text {
+    animation:monthSlide 2.1s cubic-bezier(.22,.9,.32,1) forwards;
+  }
+  @keyframes monthSlide {
+    0%   { transform:translate(120%, -50%); opacity:0; }
+    22%  { transform:translate(-50%, -50%); opacity:1; }
+    62%  { transform:translate(-50%, -50%); opacity:1; }
+    100% { transform:translate(-220%, -50%); opacity:1; }
+  }
+
+  /* 物產／攤位購買面板 */
+  #stall-shop {
+    position:fixed; inset:0; z-index:65; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(12,26,40,.55); backdrop-filter:blur(3px);
+  }
+  .ss-card {
+    background:var(--panel); border:1px solid var(--rim); border-radius:14px;
+    padding:22px 26px; min-width:280px; max-width:340px;
+    display:flex; flex-direction:column; gap:10px; backdrop-filter:blur(6px);
+  }
+  .ss-card h3 { color:var(--amber); font-size:15px; font-weight:700; margin-bottom:4px; }
+  .ss-check-row {
+    display:flex; align-items:center; gap:8px; font-family:var(--ui); font-size:14px;
+    padding:9px 12px; border-radius:8px; background:#1C3450; border:1.5px solid var(--rim);
+    color:var(--text); cursor:pointer;
+  }
+  .ss-check-row:has(input:disabled) { opacity:.45; cursor:default; }
+  .ss-check-row input[type=checkbox] { width:17px; height:17px; accent-color:var(--amber); cursor:pointer; }
+  .ss-check-row input:disabled { cursor:default; }
+  .ss-select-all { border-color:var(--amber); font-weight:700; color:var(--amber); }
+  /* 鍵盤 focus 提示：整列（或按鈕）用同一套琥珀色外框，跟方向鍵移動 focus 的操作對應 */
+  .ss-check-row:focus-within { border-color:var(--amber); background:rgba(240,160,32,.14); }
+  .ss-check-row input:focus { outline:none; }
+  #ss-confirm {
+    margin-top:4px; font-family:var(--ui); font-size:14px; font-weight:700; padding:10px; border-radius:8px;
+    background:var(--amber); color:#20150a; border:none; cursor:pointer;
+  }
+  #ss-confirm:hover { transform:scale(1.02); }
+  #ss-confirm:focus, #ss-skip:focus { outline:2px solid #fff; outline-offset:2px; }
+  #ss-skip {
+    margin-top:2px; font-family:var(--ui); font-size:13px; padding:8px; border-radius:8px;
+    background:transparent; border:1px solid var(--rim); color:var(--lo); cursor:pointer;
+  }
+  #ss-skip:hover { border-color:var(--amber); color:var(--text); }
+
+  /* Phase 3 卡片：共用卡片、商店與目標選擇面板；黃格翻卡時先等待 A／空白鍵。 */
+  #card-hand, #card-shop, #card-targets, #card-dice, #card-draw {
+    position:fixed; inset:0; z-index:72; display:none; align-items:center; justify-content:center;
+    background:rgba(12,26,40,.63); backdrop-filter:blur(4px);
+  }
+  .card-panel {
+    width:min(390px, calc(100vw - 34px)); max-height:78vh; overflow-y:auto;
+    background:var(--panel); border:1px solid var(--rim); border-radius:16px; padding:20px;
+    display:flex; flex-direction:column; gap:9px; box-shadow:0 18px 50px rgba(0,0,0,.38);
+  }
+  .card-panel h3 { color:var(--amber); font-size:16px; text-align:center; }
+  .card-panel h4 { margin:7px 0 0; color:var(--amber); font-size:12px; }
+  .card-panel p { color:var(--lo); font-size:12px; text-align:center; }
+  .card-item, .card-target-btn {
+    width:100%; text-align:left; display:grid; grid-template-columns:30px 1fr; column-gap:8px; align-items:center;
+    padding:10px; border-radius:10px; cursor:pointer; background:#1C3450; border:1px solid var(--rim); color:var(--text); font-family:var(--ui);
+  }
+  .card-item span { grid-row:span 2; font-size:23px; text-align:center; }
+  .card-item b { font-size:13.5px; } .card-item small { color:var(--lo); font-size:11px; margin-top:2px; }
+  .card-item:hover:not(:disabled), .card-target-btn:hover { transform:translateY(-1px); border-color:var(--amber); background:rgba(240,160,32,.12); }
+  .card-item:disabled { opacity:.42; cursor:default; }
+  .card-target-btn { display:block; text-align:center; font-weight:700; font-size:13.5px; }
+  .card-close { margin-top:4px; padding:9px; border-radius:9px; cursor:pointer; color:var(--lo); background:transparent; border:1px solid var(--rim); font-family:var(--ui); }
+  .card-close:hover { border-color:var(--amber); color:var(--text); }
+  #card-dice-list { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+  .dice-pick { height:52px; font:700 22px var(--ui); color:#20150a; background:var(--amber); border:0; border-radius:10px; cursor:pointer; }
+  .dice-pick:hover { transform:scale(1.04); }
+  #card-flash { position:fixed; inset:0; z-index:90; pointer-events:none; display:flex; align-items:center; justify-content:center; opacity:0; }
+  #card-flash.playing { animation:cardFlash 1.55s ease both; }
+  .card-flash-box { max-width:min(420px, 86vw); background:linear-gradient(135deg,#24486a,#172e48); border:2px solid var(--amber); border-radius:18px; padding:18px 24px; text-align:center; box-shadow:0 12px 42px rgba(0,0,0,.45); }
+  .card-flash-icon { font-size:45px; line-height:1; animation:cardPop .5s cubic-bezier(.2,1.5,.45,1) both; }
+  .card-flash-text { margin-top:8px; font-size:15px; font-weight:700; color:#fff; line-height:1.45; }
+  @keyframes cardFlash { 0%,100% { opacity:0; transform:scale(.82); } 15%,82% { opacity:1; transform:scale(1); } }
+  @keyframes cardPop { from { transform:rotate(-18deg) scale(.25); } to { transform:rotate(0) scale(1); } }
+
+  /* 探路放大鏡游標的唯讀資訊視窗 */
+  #scout-info {
+    position:fixed; inset:0; z-index:64; display:none;
+    align-items:center; justify-content:center;
+    background:rgba(12,26,40,.5); backdrop-filter:blur(2px);
+  }
+  .si-card {
+    background:var(--panel); border:1px solid var(--rim); border-radius:14px;
+    padding:20px 24px; min-width:260px; max-width:340px;
+    display:flex; flex-direction:column; gap:8px; backdrop-filter:blur(6px);
+  }
+  .si-card h3 { color:var(--amber); font-size:15px; font-weight:700; }
+  .si-row {
+    display:flex; flex-direction:column; gap:2px; font-family:var(--ui); font-size:13.5px;
+    padding:8px 10px; border-radius:8px; background:#1C3450; border:1.5px solid var(--rim); color:var(--text);
+  }
+  .si-meta { font-size:11.5px; color:var(--lo); }
+  .si-owner { font-size:11.5px; color:#FFD54A; }
+  .si-empty { font-size:13px; color:var(--lo); text-align:center; padding:10px 0; }
+  #si-close {
+    margin-top:2px; font-family:var(--ui); font-size:13px; padding:8px; border-radius:8px;
+    background:transparent; border:1px solid var(--rim); color:var(--lo); cursor:pointer;
+  }
+  #si-close:hover { border-color:var(--amber); color:var(--text); }
+
+  /* 目的地抵達演出：揭曉下一個目的地後仍停留，等待第二次 A／空白鍵回到本站事件。 */
+  #destination-celebration { position:fixed; inset:0; z-index:100; display:none; background:#d8ebf4; }
+  #dc-stage { position:relative; width:100vw; height:100vh; overflow:hidden; background:#d8ebf4 url('../圖片/車站月台.png') center/cover no-repeat; }
+  #dc-station-name { position:absolute; z-index:4; top:34%; left:50%; transform:translateX(-50%); min-width:180px; padding:9px 16px; border:4px solid #fff; border-radius:9px; box-shadow:0 5px #155377; background:#2775a7; color:#fff; text-align:center; font-size:clamp(20px,3vw,34px); font-weight:900; letter-spacing:.12em; }
+  #dc-kids { position:absolute; z-index:6; left:-7%; bottom:-5%; width:53%; height:auto; transform-origin:50% 100%; animation:dcCheer 1.02s ease-in-out infinite alternate; }
+  @keyframes dcCheer { from { transform:translateY(0) rotate(-.5deg); } to { transform:translateY(-14px) rotate(.5deg); } }
+  #dc-train { position:absolute; z-index:7; width:150%; height:auto; right:-250%; bottom:-110%; transition:right 3.8s cubic-bezier(.14,.77,.22,1); }
+  #dc-train.arrive { right:-75%; }
+  .dc-confetti { position:absolute; z-index:9; inset:0; pointer-events:none; overflow:hidden; } .dc-confetti i { position:absolute; top:-26px; left:var(--x); width:8px; height:15px; background:var(--c); animation:dcFall 2.8s linear infinite; animation-delay:var(--d); } @keyframes dcFall { to { transform:translate(var(--dx),670px) rotate(520deg); } }
+  #dc-arrival { position:absolute; z-index:12; top:22%; left:74%; transform:translateX(-50%); width:38%; text-align:center; color:#fff; text-shadow:0 3px 0 #16415c,0 5px 14px #16384e99; } #dc-arrival h2 { margin:0; font-size:clamp(28px,4vw,50px); } #dc-arrival p { margin:6px 0; font-size:clamp(14px,1.7vw,21px); font-weight:800; }
+  #dc-prompt { position:absolute; z-index:13; bottom:5%; left:50%; transform:translateX(-50%); padding:10px 17px; border:2px solid #fff8c8; border-radius:22px; background:#123a59e8; color:#fff; font-size:14px; font-weight:800; white-space:nowrap; opacity:0; transition:opacity .25s; animation:dcPulse 1.1s infinite; } #dc-prompt.show { opacity:1; } @keyframes dcPulse { 50% { transform:translateX(-50%) scale(1.06); } }
+  #dc-continue { position:absolute; z-index:16; bottom:5%; left:50%; transform:translateX(-50%); padding:10px 17px; border:2px solid #fff8c8; border-radius:22px; background:#123a59e8; color:#fff; font-size:14px; font-weight:800; white-space:nowrap; opacity:0; transition:opacity .25s; animation:dcPulse 1.1s infinite; } #dc-continue.show { opacity:1; }
+  #dc-next { position:absolute; z-index:15; top:19%; left:50%; width:min(86%,520px); transform:translateX(-50%) scale(.75); padding:22px 28px; border:4px solid #fff6bd; border-radius:18px; background:linear-gradient(135deg,#265f8e,#163d64); color:#fff; text-align:center; box-shadow:0 12px 30px #102c4088; opacity:0; transition:.4s ease; } #dc-next.show { transform:translateX(-50%) scale(1); opacity:1; } #dc-next small { display:block; color:#ffe68a; font-weight:800; letter-spacing:.12em; } #dc-next-name { display:block; margin-top:7px; font-size:clamp(31px,6vw,58px); }
+  /* 年度決算：三月結束、四月開始前的全螢幕資產快報。 */
+  #annual-settlement { position:fixed; inset:0; z-index:110; display:none; background:linear-gradient(#72ccf0 0 66%,#d9eff7 66%); color:#17354f; font-family:"PingFang TC","Microsoft JhengHei",sans-serif; }
+  .as-stage { position:relative; width:100%; height:100%; overflow:hidden; }.as-topbar { position:absolute; z-index:3; inset:0 0 auto; height:13%; padding:2.1% 4%; display:flex; align-items:center; justify-content:space-between; color:#fff; background:#102b48e8; }.as-brand { font-size:clamp(13px,2vw,24px); font-weight:900; letter-spacing:.09em; }.as-season { padding:.4em .9em; border-radius:99px; background:#fff2; font-size:clamp(10px,1.35vw,16px); font-weight:800; }
+  .as-month { position:absolute; z-index:2; left:5%; top:22%; width:31%; height:48%; padding:4% 2%; text-align:center; border:5px solid #fff; border-radius:22px; background:#fffdf4e8; box-shadow:0 10px 20px #15445b33; }.as-month span { display:block; color:#4a7895; font-weight:900; font-size:clamp(13px,1.7vw,21px); letter-spacing:.2em; }.as-month b { display:block; margin-top:5%; color:#2775a7; font-size:clamp(45px,7vw,85px); line-height:1; }.as-month small { display:block; margin-top:7%; font-weight:800; font-size:clamp(11px,1.45vw,17px); }
+  .as-cat { position:absolute; z-index:4; left:7%; bottom:-4%; width:34%; height:auto; filter:drop-shadow(0 8px 8px #17354f55); animation:asBob 1.4s ease-in-out infinite alternate; } @keyframes asBob { to { transform:translateY(-10px) rotate(-1deg); } }.as-speech { position:absolute; z-index:5; left:31%; top:26%; width:30%; min-height:20%; padding:2.2%; border:4px solid #fff; border-radius:22px; background:#fffdf8; color:#17354f; font-size:clamp(13px,1.7vw,22px); font-weight:900; line-height:1.45; box-shadow:0 7px 0 #b4d9e6; transition:opacity .35s,transform .35s; }.as-speech.hide { opacity:0; transform:translateY(-12px); pointer-events:none; }
+  .as-board { position:absolute; z-index:3; right:4%; top:19%; width:46%; padding:2% 2.4%; border:5px solid #fff3bd; border-radius:20px; background:#174b70eb; color:#fff; box-shadow:0 10px 0 #10375188; opacity:0; transform:translateY(18px); transition:.55s ease; }.as-board.show { opacity:1; transform:none; }.as-board h2 { margin:0 0 3%; text-align:center; font-size:clamp(17px,2.35vw,30px); letter-spacing:.08em; }.as-rows { display:grid; gap:8px; }.as-row { display:grid; grid-template-columns:11% 1fr 28% 27%; align-items:center; padding:1.5% 2%; border-radius:10px; background:#fff2; font-size:clamp(10px,1.35vw,17px); font-weight:800; opacity:0; transform:translateX(30px); transition:.4s ease; }.as-row.show { opacity:1; transform:none; }.as-row.leader { outline:2px solid #ffca46; background:#ffca4633; }.as-rank,.up { color:#ffe47f; }.as-total { text-align:right; }.as-row > :last-child { text-align:right; }.down { color:#ffb7c8; }
+  #as-leader { position:absolute; z-index:5; top:70%; left:73%; width:46%; transform:translateX(-50%) scale(.75); padding:.45em .8em; border:3px solid #ffca46; border-radius:18px; background:#174b70e8; color:#fff; text-align:center; text-shadow:0 3px 0 #16415c,0 5px 12px #16384e99; font-size:clamp(20px,2.8vw,37px); font-weight:900; opacity:0; transition:.45s; } #as-leader.show { opacity:1; transform:translateX(-50%) scale(1); } #as-leader-info { position:absolute; z-index:5; top:80%; left:73%; width:46%; transform:translateX(-50%); color:#fff; text-align:center; font-size:clamp(12px,1.7vw,21px); font-weight:800; -webkit-text-stroke:1.5px #102b48; paint-order:stroke fill; text-shadow:0 2px 4px #102b48cc; opacity:0; transition:.4s; } #as-leader-info.show { opacity:1; }
+  #as-prompt,.as-chart-prompt { position:absolute; z-index:7; bottom:7%; left:50%; transform:translateX(-50%); padding:10px 17px; border:2px solid #fff8c8; border-radius:22px; background:#123a59e8; color:#fff; font-size:14px; font-weight:800; white-space:nowrap; opacity:0; transition:opacity .25s; animation:asPulse 1.1s infinite; } #as-prompt.show { opacity:1; } @keyframes asPulse { 50% { transform:translateX(-50%) scale(1.06); } }
+  #as-chart { position:absolute; z-index:20; inset:0; padding:12vh 8vw 8vh; background:linear-gradient(135deg,#123e62ee,#1f7099ed); color:#fff; opacity:0; pointer-events:none; transition:.45s; } #as-chart.show { opacity:1; pointer-events:auto; } #as-chart h2 { margin:0; text-align:center; font-size:clamp(26px,4vw,52px); letter-spacing:.08em; } #as-chart p { margin:.55em 0 1.2em; text-align:center; font-size:clamp(13px,1.7vw,20px); font-weight:800; color:#d9f4ff; }.as-chart-wrap { height:58vh; padding:2%; border:3px solid #fff8; border-radius:22px; background:#08294355; }.as-chart-wrap svg { width:100%; height:100%; overflow:visible; }.as-grid { stroke:#fff5; stroke-width:1; }.as-axis { fill:#e8f8ff; font-size:14px; font-weight:800; }.as-line-label { font-size:16px; font-weight:900; stroke:#fff; stroke-width:3px; stroke-linejoin:round; paint-order:stroke fill; }.as-chart-prompt { bottom:4%; opacity:1; }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="calendar">第 1 年　4 月</div>
+  <div id="roll-info" style="display:none;font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px;"></div>
+  <div id="destination" style="display:none;font-size:13px;font-weight:700;color:#FFD54A;margin-bottom:8px;"></div>
+  <div id="players"></div>
+</div>
+
+<div id="controls">
+  <button id="btn-roll" disabled>🎲 擲骰</button>
+  <button id="btn-cards" disabled>🃏 卡片</button>
+  <button id="btn-zoom">🔍 全島 / 近景</button>
+</div>
+
+<div id="dice"></div>
+<div id="branch-layer"></div>
+<div id="toast"></div>
+
+<div id="stall-shop">
+  <div class="ss-card">
+    <h3 id="ss-title"></h3>
+    <div id="ss-list"></div>
+    <button id="ss-confirm">確定購買</button>
+    <button id="ss-skip">不買，繼續前進</button>
+  </div>
+</div>
+
+<div id="card-hand"><div class="card-panel"><h3 id="card-hand-title"></h3><p id="card-hand-note"></p><div id="card-hand-list"></div><button class="card-close" onclick="UI.hideCardHand()">收起卡片</button></div></div>
+<div id="card-shop"><div class="card-panel"><h3 id="card-shop-title"></h3><p>商店可不限次買賣；持有卡片上限為 8 張，賣出價格為該店售價的 8 折。</p><div id="card-shop-list"></div><button class="card-close" onclick="Game.leaveCardShop()">結束買賣，繼續前進</button></div></div>
+<div id="card-targets"><div class="card-panel"><h3 id="card-target-title"></h3><div id="card-target-list"></div><button class="card-close" onclick="UI.hideCardTargets(); UI.showCardHand()">返回卡片</button></div></div>
+<div id="card-dice"><div class="card-panel"><h3 id="card-dice-title"></h3><div id="card-dice-list"></div><button class="card-close" onclick="UI.hideDicePicker(); UI.showCardHand()">返回卡片</button></div></div>
+<div id="card-draw"><div class="card-panel"><h3 id="card-draw-title"></h3><div class="card-flash-icon">🃏</div><p id="card-draw-result"></p></div></div>
+<div id="card-flash"><div class="card-flash-box"><div class="card-flash-icon"></div><div class="card-flash-text"></div></div></div>
+
+<div id="destination-celebration">
+  <div id="dc-stage">
+    <div id="dc-station-name"></div>
+    <img id="dc-kids" src="../圖片/慶祝到站的小朋友-去背.png" alt="歡呼慶祝的小朋友">
+    <img id="dc-train" src="../玩家icon/普悠瑪.png" alt="普悠瑪列車">
+    <div class="dc-confetti">
+      <i style="--x:8%;--dx:65px;--d:.1s;--c:#ff6f91"></i><i style="--x:19%;--dx:-36px;--d:.8s;--c:#ffd45a"></i><i style="--x:31%;--dx:48px;--d:.4s;--c:#72d5b4"></i><i style="--x:43%;--dx:-70px;--d:1.1s;--c:#8d83e8"></i><i style="--x:55%;--dx:51px;--d:.3s;--c:#ff9568"></i><i style="--x:68%;--dx:-42px;--d:1.3s;--c:#ff6f91"></i><i style="--x:81%;--dx:62px;--d:.6s;--c:#ffd45a"></i><i style="--x:92%;--dx:-45px;--d:.9s;--c:#72d5b4"></i>
+    </div>
+    <div id="dc-arrival"><h2>🎉 抵達目的地！</h2><p id="dc-arrival-line"></p></div>
+    <div id="dc-prompt">按 A 或空白鍵，揭曉下一個目的地</div>
+    <div id="dc-next"><small>下一個目的地</small><b id="dc-next-name"></b></div>
+    <div id="dc-continue">按 A 或空白鍵，繼續旅程</div>
+  </div>
+</div>
+
+<div id="annual-settlement">
+  <div class="as-stage">
+    <header class="as-topbar"><span class="as-brand">🐾 小球貓電鐵・年度財經快報</span><span class="as-season">三月結算 → 四月開始</span></header>
+    <section class="as-month"><span>年度結算</span><b id="as-year">第 1 年</b><small>三月已結束，盤點資產中⋯</small></section>
+    <img class="as-cat" src="../圖片/角色大頭貼/去背/站長-去背.png" alt="站長貓咪主播">
+    <div class="as-speech" id="as-speech"></div>
+    <section class="as-board" id="as-board"><h2>年度資產排行榜</h2><div class="as-rows" id="as-rows"></div></section>
+    <div id="as-leader">🏆 本年度領先者</div><div id="as-leader-info"></div>
+    <div id="as-prompt">按 A 或空白鍵，查看歷年資產比較</div>
+    <section id="as-chart"><h2>📈 歷年資產變化</h2><p>所有玩家的每年總資產比較</p><div class="as-chart-wrap"><svg id="as-chart-svg" viewBox="0 0 900 430" role="img" aria-label="所有玩家歷年資產變化折線圖"></svg></div><div class="as-chart-prompt">按 A 或空白鍵，繼續四月旅程</div></section>
+  </div>
+</div>
+
+<div id="scout-info">
+  <div class="si-card">
+    <h3 id="scout-info-title"></h3>
+    <div id="scout-info-list"></div>
+    <button id="si-close">關閉</button>
+  </div>
+</div>
+<canvas id="minimap" width="190" height="218"></canvas>
+<button id="btn-settings" title="設定">⚙️</button>
+<button id="btn-mute" title="靜音切換">🔊</button>
+
+<div id="month-banner">
+  <div id="month-banner-img"></div>
+  <div class="month-banner-text"></div>
+</div>
+
+<div id="splash">
+  <img id="splash-bg" src="assets/screens/title.jpg" alt="">
+  <div class="splash-title">
+    <h1>小球貓電鐵</h1>
+    <p class="subtitle">台灣版的鐵道大富翁</p>
+  </div>
+  <div id="splash-version">V0.88</div>
+  <p class="splash-hint">按任意鍵或點擊畫面開始</p>
+</div>
+
+<div id="intro" aria-hidden="true">
+  <section class="intro-scene" data-duration="5600">
+    <img class="intro-bg" src="assets/screens/title.jpg" alt="">
+    <div class="intro-shade"></div>
+    <div class="intro-copy"><div class="intro-kicker">球貓台灣・出發</div><h2>四隻小貓，<br>一張環島車票。</h2><p>從車站出發，去看看這座島嶼每一處精彩。</p></div>
+    <div class="intro-cats"><img class="intro-cat" src="assets/chars/char_jukiu.png" alt="探險家"><img class="intro-cat" src="assets/chars/char_baixue.png" alt="旅行家"><img class="intro-cat" src="assets/chars/char_heichu.png" alt="賓士"><img class="intro-cat" src="assets/chars/char_lanpo.png" alt="站長"></div>
+  </section>
+  <section class="intro-scene" data-duration="5200">
+    <img class="intro-bg" src="assets/screens/months/07.jpg" alt="">
+    <div class="intro-shade"></div><img class="intro-vehicle" src="../玩家icon/普悠瑪.png" alt="普悠瑪列車">
+    <div class="intro-copy"><div class="intro-kicker">旅行</div><h2>夜市、山海、<br>還有離島的風。</h2><p>搭上列車、飛機與遊輪，把台灣走成自己的故事。</p></div>
+  </section>
+  <section class="intro-scene" data-duration="5200">
+    <img class="intro-bg" src="assets/screens/months/05.jpg" alt="">
+    <div class="intro-shade"></div><img class="intro-vehicle intro-plane" src="../玩家icon/飛機.png" alt="飛機">
+    <div class="intro-copy"><div class="intro-kicker">冒險</div><h2>每一個岔路口，<br>都有新的目的地。</h2><p>搶先抵達、選對路線，下一面旗幟正在遠方等你。</p></div>
+  </section>
+  <section class="intro-scene" data-duration="5200">
+    <img class="intro-bg" src="assets/screens/months/09.jpg" alt="">
+    <div class="intro-shade"></div><div class="intro-money">＋資產！</div>
+    <div class="intro-cats"><img class="intro-cat" src="assets/chars/char_jukiu.png" alt="探險家"><img class="intro-cat" src="assets/chars/char_baixue.png" alt="旅行家"><img class="intro-cat" src="assets/chars/char_heichu.png" alt="賓士"><img class="intro-cat" src="assets/chars/char_lanpo.png" alt="站長"></div>
+    <div class="intro-copy"><div class="intro-kicker">賺錢</div><h2>買下最愛的物產，<br>累積自己的版圖。</h2><p>夜市的人潮、農田的豐收、城市的機會，全都會成為你的資產。</p></div>
+  </section>
+  <section class="intro-scene" data-duration="5600">
+    <img class="intro-bg" src="assets/screens/setup.jpg" alt="">
+    <div class="intro-shade"></div>
+    <div class="intro-copy"><div class="intro-kicker">目標</div><h2>成為台灣首富！</h2><p>小球貓電鐵，現在出發。</p></div>
+    <div class="intro-cats"><img class="intro-cat" src="assets/chars/char_jukiu.png" alt="探險家"><img class="intro-cat" src="assets/chars/char_baixue.png" alt="旅行家"><img class="intro-cat" src="assets/chars/char_heichu.png" alt="賓士"><img class="intro-cat" src="assets/chars/char_lanpo.png" alt="站長"></div>
+  </section>
+  <button id="intro-skip" type="button">跳過序章　Enter／A</button><div id="intro-progress"></div>
+</div>
+
+<div id="setup">
+  <img id="setup-bg" src="assets/screens/setup.jpg" alt="">
+  <h2>選擇對戰人數</h2>
+  <div class="row">
+    <button class="n-btn" data-n="2">2 人<br>對戰</button>
+    <button class="n-btn" data-n="3">3 人<br>對戰</button>
+    <button class="n-btn" data-n="4">4 人<br>對戰</button>
+  </div>
+  <button id="btn-load-save" class="load-save-btn">📂 讀取存檔</button>
+  <p class="hint">同機輪流（hot-seat）・空白鍵擲骰・Z 或按鈕切換全島視角・滾輪縮放</p>
+</div>
+
+<div id="roster">
+  <img id="roster-bg" src="assets/screens/setup.jpg" alt="">
+  <h2>設定玩家</h2>
+  <div id="roster-list"></div>
+  <div class="roster-years">
+    <span>遊戲年數：</span>
+    <select id="roster-years-select">
+      <option value="3">短局（3 年）</option>
+      <option value="5" selected>標準（5 年）</option>
+      <option value="10">長局（10 年）</option>
+      <option value="custom">自訂</option>
+    </select>
+    <input type="number" id="roster-years-custom" min="1" max="99" value="5" style="display:none;">
+  </div>
+  <div class="roster-quickwin">
+    <label><input type="checkbox" id="roster-quickwin-toggle"> 快速模式：資產達標立即獲勝</label>
+    <input type="number" id="roster-quickwin-target" min="1" value="500" style="display:none;"> 萬元
+  </div>
+  <button id="roster-start">開始遊戲</button>
+  <p class="hint">點大頭貼可任選角色；可自行改名；每位玩家可選真人或電腦（三種難度）</p>
+</div>
+
+<div id="confirm-modal">
+  <div class="cm-card">
+    <p id="cm-message"></p>
+    <div class="cm-actions">
+      <button id="cm-cancel">取消</button>
+      <button id="cm-ok">確定</button>
+    </div>
+  </div>
+</div>
+
+<div id="gameover">
+  <div class="go-card">
+    <h2>🏁 遊戲結束！第 <span id="go-years"></span> 年結算</h2>
+    <div id="go-rank"></div>
+    <button id="go-extend">⏫ 延長遊戲，繼續玩</button>
+    <button id="go-restart">再玩一次</button>
+  </div>
+</div>
+
+<div id="settings-menu">
+  <div class="cfg-card">
+    <h2>⚙️ 設定</h2>
+    <div>
+      <div class="cfg-label">我的資產</div>
+      <div id="cfg-assets"></div>
+    </div>
+    <button id="cfg-mute-toggle">🔊 靜音：關</button>
+    <button id="cfg-extend">📅 變更遊戲年數</button>
+    <button id="cfg-close">關閉</button>
+  </div>
+</div>
+
+<div id="extend-years">
+  <div class="ey-card">
+    <h3>變更遊戲年數</h3>
+    <p class="ey-cur">目前設定：<span id="ey-cur-total"></span> 年（現在第 <span id="ey-cur-year"></span> 年）</p>
+    <div class="ey-row">
+      <span>新的總年數</span>
+      <input type="number" id="ey-input" min="1" max="99" value="5">
+      <span>年</span>
+    </div>
+    <button id="ey-confirm">確定</button>
+    <button id="ey-cancel">取消</button>
+  </div>
+</div>
+
+<div id="save-slots">
+  <div class="ss-slots-card">
+    <h2 id="save-slots-title">讀取存檔</h2>
+    <div id="save-slots-list"></div>
+    <button id="save-slots-back">返回</button>
+  </div>
+</div>
+
+<div id="save-detail">
+  <div class="sd-card">
+    <h2 id="sd-title"></h2>
+    <p id="sd-meta"></p>
+    <div id="sd-players"></div>
+    <div class="sd-actions">
+      <button id="sd-load">讀取這個存檔</button>
+      <button id="sd-delete">刪除存檔</button>
+      <button id="sd-back">返回列表</button>
+    </div>
+  </div>
+</div>
+
+<script src="map_data.js?v=89"></script>
+<script src="src/data.js?v=89"></script>
+<script src="src/audio.js?v=89"></script>
+<script src="src/board.js?v=89"></script>
+<script src="src/render.js?v=89"></script>
+<script src="src/savegame.js?v=89"></script>
+<script src="src/rules.js?v=89"></script>
+<script src="src/ui-v0.88.js?v=1"></script>
+<script src="src/main-v0.88.js?v=1"></script>
+</body>
+</html>

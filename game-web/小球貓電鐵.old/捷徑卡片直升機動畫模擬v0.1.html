@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小球貓電鐵｜捷徑卡片直升機動畫模擬 v0.1</title>
+<style>
+  :root { --ink:#16344e; --gold:#ffc43d; --sky:#58b8dc; }
+  * { box-sizing:border-box; } html,body { margin:0; width:100%; height:100%; overflow:hidden; font-family:"PingFang TC","Microsoft JhengHei",sans-serif; background:#102e44; }
+  #stage { position:relative; width:100%; height:100%; overflow:hidden; background:#bde1b2 url('assets/map_bg.svg') center/cover no-repeat; }
+  #shade { position:absolute; inset:0; background:linear-gradient(120deg,#102e4433,#102e4400 55%,#102e4444); pointer-events:none; }
+  #card { position:absolute; z-index:6; left:4%; top:5%; width:min(30vw,320px); padding:18px 20px; border:4px solid #fff5bb; border-radius:22px; color:#fff; background:linear-gradient(145deg,#265f8e,#123756); box-shadow:0 10px 0 #0d294288,0 18px 35px #0d294277; transform:translateY(-140%); opacity:0; transition:.45s cubic-bezier(.21,.85,.34,1); }
+  #card.show { transform:none; opacity:1; } #card .tag { color:#ffe57f; font-size:13px; font-weight:900; letter-spacing:.12em; } #card h1 { margin:6px 0 2px; font-size:clamp(25px,3vw,41px); } #card p { margin:0; font-weight:800; font-size:15px; }
+  #use-line { position:absolute; z-index:7; left:50%; top:10%; transform:translateX(-50%) scale(.75); padding:11px 22px; border:3px solid #fff; border-radius:999px; color:#17364e; background:#fffdf2; box-shadow:0 5px 0 #92c9da; font-weight:900; opacity:0; transition:.35s; } #use-line.show { transform:translateX(-50%) scale(1); opacity:1; }
+  #route { position:absolute; z-index:2; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; } #route path { fill:none; stroke:#fff4a7; stroke-width:7; stroke-linecap:round; stroke-dasharray:13 16; filter:drop-shadow(0 2px 1px #16415c88); opacity:0; } #route.play path { animation:routeDraw 2.35s linear forwards; } @keyframes routeDraw { 0% { opacity:0; stroke-dashoffset:140; } 12% { opacity:1; } 100% { opacity:1; stroke-dashoffset:0; } }
+  .spot { position:absolute; z-index:3; width:0; height:0; } .spot::before { content:""; position:absolute; width:44px; height:44px; transform:translate(-50%,-50%); border:4px solid #fff; border-radius:50%; background:#2376ac; box-shadow:0 0 0 7px #2070a955,0 8px 12px #193b5555; } .spot b { position:absolute; top:28px; left:0; transform:translateX(-50%); padding:4px 9px; border-radius:9px; color:#fff; background:#163d5ddd; font-size:14px; white-space:nowrap; text-shadow:0 1px #0008; } #to::before { background:#f4a91e; } #to.pulse::before { animation:targetPulse .72s ease-in-out infinite alternate; } @keyframes targetPulse { to { box-shadow:0 0 0 17px #ffd65a55,0 0 26px #fff0a7,0 8px 12px #193b5555; transform:translate(-50%,-50%) scale(1.12); } }
+  #heli-shadow { position:absolute; z-index:4; width:70px; height:18px; border-radius:50%; background:#102d4588; filter:blur(4px); transform:translate(-50%,-50%); transition:left 2.35s cubic-bezier(.2,.74,.28,1),top 2.35s cubic-bezier(.2,.74,.28,1); }
+  #heli { position:absolute; z-index:5; width:112px; height:auto; transform:translate(-50%,-50%); transform-origin:50% 50%; filter:drop-shadow(0 9px 5px #17364e88); transition:left 2.35s cubic-bezier(.2,.74,.28,1),top 2.35s cubic-bezier(.2,.74,.28,1),transform .35s; }
+  #heli.flying { animation:heliBob .26s ease-in-out infinite alternate; } @keyframes heliBob { to { margin-top:-11px; transform:translate(-50%,-50%) rotate(-4deg); } }
+  #arrival { position:absolute; z-index:8; left:50%; top:22%; transform:translateX(-50%) scale(.7); width:min(70vw,560px); padding:17px 26px; border:4px solid #fff5ae; border-radius:20px; color:#fff; background:linear-gradient(135deg,#2879aa,#154261); box-shadow:0 10px 28px #0d2a4088; text-align:center; opacity:0; transition:.4s; } #arrival.show { transform:translateX(-50%) scale(1); opacity:1; } #arrival h2 { margin:0; font-size:clamp(24px,4vw,47px); } #arrival p { margin:5px 0 0; color:#fff1a6; font-weight:800; }
+  #ctl { position:absolute; z-index:20; right:18px; bottom:18px; width:260px; padding:14px; border:2px solid #69b3d5; border-radius:16px; color:#eaf7ff; background:#102f49eF; box-shadow:0 10px 25px #071e2e88; } #ctl h3 { margin:0 0 7px; color:#ffd65a; font-size:15px; } #ctl p { margin:0 0 10px; color:#a6c9dc; font-size:12px; line-height:1.5; } select,button { width:100%; font:800 14px inherit; } select { margin-bottom:8px; padding:8px; border:2px solid #60a7c7; border-radius:8px; color:#fff; background:#173d58; } button { padding:10px; border:3px solid #fff4b7; border-radius:10px; color:#382600; background:linear-gradient(#ffdc62,#f2a21d); box-shadow:0 4px #b36d08; cursor:pointer; } button:active { transform:translateY(3px); box-shadow:0 1px #b36d08; }
+  @media (max-width:700px) { #card { width:52vw; left:3%; top:3%; padding:12px; } #ctl { right:8px; bottom:8px; width:210px; } #heli { width:86px; } }
+</style>
+</head>
+<body>
+<main id="stage">
+  <div id="shade"></div>
+  <svg id="route" aria-hidden="true"><path id="route-line" /></svg>
+  <div id="from" class="spot"><b id="from-name"></b></div>
+  <div id="to" class="spot pulse"><b>花蓮</b></div>
+  <div id="heli-shadow"></div><img id="heli" src="../圖片/玩家icon/直升機.png" alt="捷徑直升機">
+  <section id="card"><div class="tag">移動卡片</div><h1>🚁 蘇花捷徑</h1><p>直接前往花蓮</p></section>
+  <div id="use-line">探險家使用「蘇花捷徑」！</div>
+  <section id="arrival"><h2>抵達花蓮！</h2><p>捷徑移動完成，繼續本回合。</p></section>
+  <aside id="ctl"><h3>捷徑卡片動畫 v0.1</h3><p>選擇目前站點後，觀看直升機飛往卡片指定的花蓮站。</p><select id="origin"><option value="taipei">台北</option><option value="taichung" selected>台中</option><option value="tainan">台南</option><option value="kaohsiung">高雄</option></select><button id="play">🚁 使用蘇花捷徑</button></aside>
+</main>
+<script>
+const points = { taipei:{name:'台北',x:51,y:27}, taichung:{name:'台中',x:45,y:53}, tainan:{name:'台南',x:43,y:73}, kaohsiung:{name:'高雄',x:47,y:82}, hualien:{name:'花蓮',x:77,y:48} };
+const $ = id => document.getElementById(id), from=$('from'), to=$('to'), heli=$('heli'), shadow=$('heli-shadow'), route=$('route'), line=$('route-line');
+let timer=null;
+function pos(el,p) { el.style.left=p.x+'%'; el.style.top=p.y+'%'; }
+function restart() {
+  clearTimeout(timer); const start=points[$('origin').value], end=points.hualien;
+  pos(from,start); pos(to,end); $('from-name').textContent=start.name;
+  heli.classList.remove('flying'); route.classList.remove('play'); $('card').classList.remove('show'); $('use-line').classList.remove('show'); $('arrival').classList.remove('show');
+  pos(heli,start); pos(shadow,{x:start.x,y:start.y+3});
+  const svg=route.getBoundingClientRect(), x1=svg.width*start.x/100, y1=svg.height*start.y/100, x2=svg.width*end.x/100, y2=svg.height*end.y/100;
+  line.setAttribute('d',`M ${x1} ${y1} Q ${(x1+x2)/2} ${Math.min(y1,y2)-120} ${x2} ${y2}`);
+  void heli.offsetWidth;
+  $('card').classList.add('show');
+  setTimeout(()=> $('use-line').classList.add('show'),330);
+  setTimeout(()=> { route.classList.add('play'); heli.classList.add('flying'); pos(heli,end); pos(shadow,{x:end.x,y:end.y+3}); },850);
+  timer=setTimeout(()=> { heli.classList.remove('flying'); $('arrival').classList.add('show'); to.classList.add('pulse'); },3350);
+}
+$('play').onclick=restart; $('origin').onchange=restart; addEventListener('resize',()=>setTimeout(restart,80)); restart();
+</script>
+</body>
+</html>

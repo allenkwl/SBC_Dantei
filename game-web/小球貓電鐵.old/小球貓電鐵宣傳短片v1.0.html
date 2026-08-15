@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小球貓電鐵｜宣傳短片 v1.0</title>
+<style>
+/* ────────────────────────────────────────────────────────────────
+   宣傳短片 v1.0：整支重寫，不再用 iframe 嵌入實際遊戲／模擬器。
+   舊版把正式遊戲與各動畫模擬器整個塞進 iframe，每一段都要等一份完整遊戲載入、
+   再靠 postMessage 去戳它開始演出，只要載入順序或訊息時機差一點，那一段就會是
+   空白或停在標題畫面；而且畫面內容由遊戲 AI 自己跑，長度跟構圖都無法預期。
+   這一版改成：所有畫面都用遊戲既有的美術素材，在這支檔案裡自己用 CSS 動畫演，
+   時間軸完全由短片自己掌握，每次播放結果都一樣。
+   ──────────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+  --gold: #ffd24a; --ink: #10293f; --deep: #0b1d31;
+  --ui: "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--deep); font-family: var(--ui); }
+body { display: grid; place-items: center; padding: 20px; }
+
+#film {
+  position: relative; isolation: isolate; overflow: hidden;
+  width: min(100%, 1280px); aspect-ratio: 16 / 9;
+  border: 4px solid var(--gold); border-radius: 20px; background: #08161f;
+  box-shadow: 0 26px 70px #000c;
+}
+
+/* ── 場景切換 ─────────────────────────────────────────── */
+.scene { position: absolute; inset: 0; opacity: 0; transition: opacity .6s ease; pointer-events: none; }
+.scene.active { opacity: 1; }
+.fill { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* ── 字幕 ─────────────────────────────────────────────── */
+.cap {
+  position: absolute; z-index: 8; left: 5%; right: 5%; bottom: 8%;
+  color: #fff; font-weight: 900; line-height: 1.25;
+  font-size: clamp(20px, 3.7vw, 50px);
+  text-shadow: 0 4px 0 #123, 0 8px 20px #000d;
+  opacity: 0; transform: translateY(18px);
+}
+.scene.active .cap { animation: capIn .55s ease .3s both; }
+.cap b { color: var(--gold); }
+.cap small { display: block; margin-top: .45em; font-size: .45em; color: #ffe9a0; letter-spacing: .06em; }
+.cap.center { text-align: center; }
+@keyframes capIn { to { opacity: 1; transform: none; } }
+
+.vig { position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  box-shadow: inset 0 -140px 110px -80px #000d, inset 0 0 90px #0012264d; }
+
+/* ── 1. 主畫面 ─────────────────────────────────────────── */
+.s-title { background: #08161f; }
+.s-title .fill { filter: brightness(.62) saturate(1.05); }
+.scene.active .s-title-img { animation: slowZoom 6s ease-out both; }
+@keyframes slowZoom { from { transform: scale(1.14); } to { transform: scale(1); } }
+.title-box { position: absolute; z-index: 7; inset: 0; display: grid; place-content: center; text-align: center; padding: 4vw; }
+.badge { display: inline-block; margin: 0 auto .5em; padding: .4em 1.1em; border: 2px solid #ffeaa8;
+  border-radius: 99px; background: #143b59d9; color: #ffeaa8; font-weight: 900; letter-spacing: .14em;
+  font-size: clamp(12px, 1.5vw, 19px); }
+.logo { color: var(--gold); font-size: clamp(40px, 8.4vw, 118px); font-weight: 900; letter-spacing: .06em;
+  -webkit-text-stroke: 2px #5d3703; text-shadow: 0 7px 0 #123, 0 14px 30px #000c; }
+.tagline { margin-top: .3em; color: #fff; font-weight: 900; font-size: clamp(16px, 2.7vw, 36px);
+  letter-spacing: .1em; text-shadow: 0 4px 0 #123, 0 8px 18px #000c; }
+.scene.active .title-box > * { animation: riseIn .7s ease both; }
+.scene.active .badge { animation-delay: .15s; }
+.scene.active .logo { animation-delay: .35s; }
+.scene.active .tagline { animation-delay: .6s; }
+@keyframes riseIn { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+
+/* ── 2. 地圖巡覽 ───────────────────────────────────────── */
+.s-map { background: #7fb4d6; }
+/* 地圖底圖是 2180×2495 的直式圖，台灣本島偏在右側。
+   注意：直式圖放進 16:9 的框、用 object-fit:cover 時，寬度是「剛好貼齊」的，
+   所以 object-position 的 X 完全不會有作用（只有垂直方向有裁切餘裕）。
+   要把鏡頭移到本島，只能先放大讓寬度溢出，再用 translateX 往左推。 */
+.map-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scene.active .map-img { animation: mapPan 6.5s linear both; }
+@keyframes mapPan {
+  from { transform: scale(1.75) translate(-20%, -8%); }
+  to   { transform: scale(1.75) translate(-20%, 8%); }
+}
+/* 地圖上飄過的目的地旗標，暗示「全台跑透透」（座標落在本島範圍內） */
+.pin { position: absolute; z-index: 5; font-size: clamp(22px, 3vw, 44px); filter: drop-shadow(0 4px 6px #0007); opacity: 0; }
+.scene.active .pin { animation: pinPop .5s ease both; }
+.pin:nth-child(2) { top: 24%; left: 52%; animation-delay: .8s; }
+.pin:nth-child(3) { top: 44%; left: 66%; animation-delay: 1.5s; }
+.pin:nth-child(4) { top: 64%; left: 56%; animation-delay: 2.2s; }
+.pin:nth-child(5) { top: 38%; left: 78%; animation-delay: 2.9s; }
+@keyframes pinPop { from { opacity: 0; transform: translateY(-18px) scale(.5); } to { opacity: 1; transform: none; } }
+
+/* ── 3. 擲骰子 ─────────────────────────────────────────── */
+.s-dice { background: radial-gradient(ellipse at 50% 40%, #2f6f96 0%, #17415f 55%, #0a2033 100%); }
+.felt { position: absolute; inset: 9% 8% 16%; border: 9px solid #d6a747; border-radius: 46% 46% 40% 40%;
+  background: radial-gradient(ellipse at 50% 38%, #3f7c9e, #17415f 72%);
+  box-shadow: inset 0 0 0 7px #8c5e24, 0 22px 44px #0008; transform: perspective(900px) rotateX(9deg); }
+.die {
+  position: absolute; z-index: 5; width: clamp(70px, 11vw, 150px); aspect-ratio: 2948 / 3201;
+  background-image: url("../圖片/骰子/骰子六面圖v0.3.png");
+  background-size: 300% 200%; background-repeat: no-repeat;
+  filter: drop-shadow(0 12px 9px #0007); transform: translate(-50%, -50%);
+}
+.f1 { background-position: 0 0; } .f2 { background-position: 50% 0; } .f3 { background-position: 100% 0; }
+.f4 { background-position: 0 100%; } .f5 { background-position: 50% 100%; } .f6 { background-position: 100% 100%; }
+.scene.active .die { animation: dieThrow 1.15s cubic-bezier(.15,.75,.25,1) both; }
+.die.d1 { left: 42%; top: 46%; }
+.die.d2 { left: 58%; top: 54%; animation-delay: .12s !important; }
+.die.d3 { left: 50%; top: 66%; animation-delay: .24s !important; }
+@keyframes dieThrow {
+  0%   { opacity: 0; transform: translate(-320%, -320%) scale(.25) rotate(-260deg); }
+  14%  { opacity: 1; }
+  60%  { transform: translate(-110%, -95%) scale(1.12) rotate(430deg); }
+  82%  { transform: translate(-58%, -44%) scale(.92) rotate(640deg); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(720deg); }
+}
+.total {
+  position: absolute; z-index: 7; left: 50%; top: 20%; transform: translateX(-50%);
+  padding: .35em 1.1em; border: 3px solid #fff3b4; border-radius: 99px; background: #10314bE6;
+  color: var(--gold); font-weight: 900; font-size: clamp(19px, 3vw, 40px); letter-spacing: .08em;
+  opacity: 0; white-space: nowrap;
+}
+.scene.active .total { animation: popIn .45s cubic-bezier(.2,1.6,.4,1) 1.35s both; }
+@keyframes popIn { from { opacity: 0; transform: translateX(-50%) scale(.5); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+
+/* ── 4. 列車奔馳 ───────────────────────────────────────── */
+.s-run { background: linear-gradient(#8ed0f2 0%, #bfe6f7 52%, #9fd88a 52%, #7cc46a 100%); }
+.cloud { position: absolute; z-index: 2; color: #fff; font-size: clamp(30px, 5vw, 74px); opacity: .95;
+  filter: drop-shadow(0 3px 5px #0002); }
+/* 一定要 infinite：只跑一次的話雲飄出左邊之後就停在畫面外，整段天空會空空的 */
+.scene.active .cloud { animation: drift 7s linear infinite; }
+.cloud:nth-of-type(1) { top: 10%; animation-delay: 0s !important; }
+.cloud:nth-of-type(2) { top: 22%; animation-delay: -2.5s !important; }
+.cloud:nth-of-type(3) { top: 6%;  animation-delay: -5s !important; }
+@keyframes drift { from { left: 105%; } to { left: -25%; } }
+.rail { position: absolute; z-index: 3; left: 0; right: 0; bottom: 24%; height: 10px; background: #6b4a2a;
+  box-shadow: 0 9px 0 #4d341c; }
+/* 枕木用會捲動的重複漸層做，不用逐一擺 N 個元素；捲動速度呼應列車前進，帶出速度感 */
+.ties { position: absolute; z-index: 3; left: 0; right: 0; bottom: 21%; height: 26px;
+  background: repeating-linear-gradient(90deg, #5b3f22 0 14px, transparent 14px 84px); }
+.scene.active .ties { animation: tieRun .55s linear infinite; }
+@keyframes tieRun { to { background-position-x: -84px; } }
+.runner { position: absolute; z-index: 5; bottom: 26%; width: clamp(230px, 40vw, 560px); }
+.scene.active .runner { animation: runIn 6.5s cubic-bezier(.3,.05,.3,1) both, bob .55s ease-in-out infinite; }
+@keyframes runIn { from { left: -46%; } to { left: 62%; } }
+@keyframes bob { 50% { transform: translateY(-5px); } }
+.hill { position: absolute; z-index: 2; bottom: 30%; width: clamp(90px, 13vw, 190px); opacity: .95; }
+.scene.active .hill { animation: drift 9s linear infinite; }
+
+/* ── 5. 直升機捷徑 ─────────────────────────────────────── */
+.s-heli { background: linear-gradient(#71bfe8, #a9dcf3 60%, #86c98f 60%, #6fb977 100%); }
+.heli { position: absolute; z-index: 6; width: clamp(120px, 20vw, 290px); top: 24%; }
+.scene.active .heli { animation: heliFly 6.4s cubic-bezier(.35,.05,.4,1) both, heliSway .9s ease-in-out infinite; }
+@keyframes heliFly {
+  0%   { left: -30%; transform: scale(.75); }
+  45%  { transform: scale(1.1); }
+  100% { left: 68%; transform: scale(.85); }
+}
+@keyframes heliSway { 50% { margin-top: -12px; } }
+.dash { position: absolute; z-index: 4; left: 0; right: 0; top: 42%; height: 6px;
+  background: repeating-linear-gradient(90deg, #fff 0 26px, transparent 26px 52px); opacity: .85; }
+.scene.active .dash { animation: dashRun .7s linear infinite; }
+@keyframes dashRun { to { background-position-x: 52px; } }
+.flag-goal { position: absolute; z-index: 5; right: 12%; top: 34%; font-size: clamp(30px, 4.6vw, 68px);
+  filter: drop-shadow(0 5px 7px #0006); opacity: 0; }
+.scene.active .flag-goal { animation: pinPop .5s ease 3.4s both, wave 1s ease-in-out 3.9s infinite; }
+@keyframes wave { 50% { transform: rotate(-11deg); } }
+
+/* ── 6. 進站慶祝 ───────────────────────────────────────── */
+.s-arrive { background: #123; }
+.s-arrive .fill { filter: saturate(1.06); }
+/* 列車與小朋友都往上抬到月台面上：擺太低會跟畫面下緣的字幕疊在一起 */
+.arrive-train { position: absolute; z-index: 5; bottom: 21%; width: clamp(240px, 44vw, 620px); }
+.scene.active .arrive-train { animation: pullIn 2.6s cubic-bezier(.2,.7,.25,1) both; }
+@keyframes pullIn { from { right: -55%; } to { right: 26%; } }
+.kid { position: absolute; z-index: 6; bottom: 20%; width: clamp(52px, 8.4vw, 120px); opacity: 0; }
+.scene.active .kid { animation: kidIn .4s ease both, hop .62s ease-in-out infinite; }
+.kid:nth-of-type(1) { left: 5%;  animation-delay: 2.2s, 2.6s !important; }
+.kid:nth-of-type(2) { left: 15%; animation-delay: 2.35s, 2.5s !important; }
+.kid:nth-of-type(3) { left: 25%; animation-delay: 2.5s, 2.75s !important; }
+.kid:nth-of-type(4) { left: 35%; animation-delay: 2.65s, 2.55s !important; }
+@keyframes kidIn { to { opacity: 1; } }
+@keyframes hop { 50% { transform: translateY(-17px); } }
+.arrive-banner {
+  position: absolute; z-index: 7; top: 12%; left: 50%; transform: translateX(-50%);
+  padding: .3em 1.2em; border: 4px solid #fff; border-radius: 14px; background: #d8382fee;
+  color: #fff; font-weight: 900; font-size: clamp(20px, 3.4vw, 46px); letter-spacing: .1em;
+  white-space: nowrap; box-shadow: 0 8px 0 #7d1a15, 0 16px 30px #0008; opacity: 0;
+}
+.scene.active .arrive-banner { animation: popIn .5s cubic-bezier(.2,1.6,.4,1) 2.9s both; }
+.spark { position: absolute; z-index: 6; font-size: clamp(18px, 2.4vw, 34px); opacity: 0; }
+.scene.active .spark { animation: sparkle 1.1s ease infinite; }
+@keyframes sparkle { 0%,100% { opacity: 0; transform: scale(.6); } 50% { opacity: 1; transform: scale(1.15); } }
+
+/* ── 7. 有錢貓咪 ───────────────────────────────────────── */
+.s-rich { background: radial-gradient(ellipse at 50% 36%, #ffdd8a 0%, #f0a63c 44%, #b45f12 100%); overflow: hidden; }
+.rich-wrap { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center;
+  text-align: center; transform: translateY(-9%); z-index: 5; }
+.rich-cat { position: relative; width: clamp(120px, 17vw, 240px); aspect-ratio: 1; border-radius: 28%;
+  border: 5px solid #fff6d0; box-shadow: 0 13px 0 #8b4e08, 0 24px 44px #0007, 0 0 60px #fff2a8cc; }
+.scene.active .rich-cat { animation: richPop .6s cubic-bezier(.2,1.6,.4,1) both, richBob 1.15s ease-in-out .6s infinite; }
+@keyframes richPop { from { opacity: 0; transform: scale(.4) rotate(-14deg); } to { opacity: 1; transform: none; } }
+@keyframes richBob { 50% { transform: translateY(-12px) scale(1.03); } }
+.crown { position: absolute; top: -.44em; left: 50%; font-size: clamp(32px, 5vw, 68px);
+  transform: translateX(-50%) rotate(-9deg); filter: drop-shadow(0 5px 6px #0006); }
+.scene.active .crown { animation: crownTilt 1.15s ease-in-out infinite; }
+@keyframes crownTilt { 50% { transform: translateX(-50%) rotate(9deg) translateY(-5px); } }
+.amount { margin-top: .42em; color: #fffbe8; font-weight: 900; font-variant-numeric: tabular-nums;
+  font-size: clamp(30px, 5.6vw, 78px); -webkit-text-stroke: 2px #6b3a06;
+  text-shadow: 0 6px 0 #8b4e08, 0 12px 26px #0008; }
+.amount-label { margin-top: .05em; color: #4a2a05; font-weight: 900; letter-spacing: .18em;
+  font-size: clamp(12px, 1.8vw, 24px); text-shadow: 0 2px 0 #ffe9a8; }
+.coin { position: absolute; top: -12%; z-index: 3; font-size: clamp(19px, 2.5vw, 38px);
+  filter: drop-shadow(0 3px 4px #0005); }
+.scene.active .coin { animation: coinFall linear infinite; }
+@keyframes coinFall {
+  0% { transform: translateY(-10%) rotate(0); opacity: 0; }
+  12% { opacity: 1; } 88% { opacity: 1; }
+  100% { transform: translateY(920%) rotate(760deg); opacity: 0; }
+}
+.s-rich .cap { text-align: center; color: #fffdf2; text-shadow: 0 4px 0 #8b4e08, 0 8px 18px #0008; bottom: 5.5%; }
+
+/* ── 8. 結尾 ───────────────────────────────────────────── */
+.s-end { background: #08161f; }
+.s-end .fill { filter: brightness(.5) saturate(1.05); }
+.end-box { position: absolute; inset: 0; z-index: 7; display: grid; place-content: center; text-align: center; padding: 4vw; }
+.scene.active .end-box > * { animation: riseIn .7s ease both; }
+.scene.active .end-box .badge { animation-delay: .2s; }
+.scene.active .end-box .logo { animation-delay: .45s; }
+.scene.active .end-box .tagline { animation-delay: .75s; }
+
+/* ── 控制列 ───────────────────────────────────────────── */
+#gate { position: absolute; z-index: 30; inset: 0; display: grid; place-items: center;
+  background: linear-gradient(#0b2134b3, #09182bee), url("assets/screens/title.jpg") center / cover; }
+#gate[hidden] { display: none; }
+#gate button { padding: .7em 1.5em; border: 3px solid #fff3b4; border-radius: 99px;
+  background: linear-gradient(#ffdf68, #ec9b1e); box-shadow: 0 7px 0 #8b4e08, 0 16px 28px #0009;
+  color: #1b3041; font: 900 clamp(20px, 3vw, 38px) var(--ui); cursor: pointer; }
+#gate button:active { transform: translateY(5px); box-shadow: 0 2px 0 #8b4e08; }
+#gate p { margin-top: 1.1em; color: #fff; font-weight: 800; text-align: center;
+  font-size: clamp(12px, 1.6vw, 19px); text-shadow: 0 2px 5px #000; }
+#ctl { position: absolute; z-index: 20; right: 16px; bottom: 15px; display: flex; gap: 8px; }
+#ctl button { min-width: 42px; padding: 9px 13px; border: 2px solid #ffe69a; border-radius: 12px;
+  background: #123650e8; color: #fff; font: 800 15px var(--ui); cursor: pointer; box-shadow: 0 3px 0 #071b2c; }
+#ctl button:hover { background: #235b80; }
+#bar { position: absolute; z-index: 21; inset: auto 0 0 0; height: 6px; background: #06182799; }
+#bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ffca44, #ffef8a); }
+
+@media (max-width: 720px) {
+  body { padding: 0; }
+  #film { width: 100vw; border: 0; border-radius: 0; }
+  #ctl { right: 9px; bottom: 10px; } #ctl button { padding: 6px 9px; min-width: 34px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+</style>
+</head>
+<body>
+<main id="film" aria-label="小球貓電鐵宣傳短片">
+
+  <!-- 1. 主畫面 -->
+  <section class="scene s-title" data-dur="5200">
+    <img class="fill s-title-img" src="assets/screens/title.jpg" alt="">
+    <div class="title-box">
+      <div><span class="badge">台灣鐵道 × 歡樂大富翁</span></div>
+      <div class="logo">小球貓電鐵</div>
+      <div class="tagline">和貓咪一起，展開全台冒險！</div>
+    </div>
+    <div class="vig"></div>
+  </section>
+
+  <!-- 2. 地圖巡覽 -->
+  <section class="scene s-map" data-dur="5600">
+    <img class="map-img" src="assets/map_bg.svg" alt="">
+    <span class="pin">📍</span><span class="pin">🚩</span><span class="pin">📍</span><span class="pin">🚩</span>
+    <div class="vig"></div>
+    <p class="cap">全台 <b>1600+</b> 個站點，任你闖蕩<small>從台北到墾丁，從離島到山線，每一站都有驚喜</small></p>
+  </section>
+
+  <!-- 3. 擲骰子 -->
+  <section class="scene s-dice" data-dur="5200" data-sfx="dice">
+    <div class="felt"></div>
+    <span class="die f6 d1"></span><span class="die f5 d2"></span><span class="die f6 d3"></span>
+    <div class="total">🎲 擲出 17 點！</div>
+    <div class="vig"></div>
+    <p class="cap">輪到你了，<b>擲骰出發</b>！<small>骰子點數決定這一回合能走多遠</small></p>
+  </section>
+
+  <!-- 4. 列車奔馳 -->
+  <section class="scene s-run" data-dur="5600">
+    <span class="cloud">☁️</span><span class="cloud">☁️</span><span class="cloud">☁️</span>
+    <img class="hill" style="left:80%" src="assets/decos/山脈風景-夏天.png" alt="">
+    <div class="ties"></div>
+    <div class="rail"></div>
+    <img class="runner" src="assets/trains/train_black_local.png" alt="">
+    <div class="vig"></div>
+    <p class="cap">搭上列車，<b>走遍台灣每一站</b><small>慢車、區間車、自強號、高鐵，速度各有不同</small></p>
+  </section>
+
+  <!-- 5. 直升機捷徑 -->
+  <section class="scene s-heli" data-dur="5600" data-sfx="heli">
+    <span class="cloud" style="top:14%">☁️</span><span class="cloud" style="top:30%">☁️</span>
+    <div class="dash"></div>
+    <img class="heli" src="../圖片/玩家icon/直升機-飛行.png" alt="">
+    <span class="flag-goal">🚩</span>
+    <div class="vig"></div>
+    <p class="cap">善用卡片，<b>突破距離限制</b><small>直升機帶你飛越山海，直達目的地</small></p>
+  </section>
+
+  <!-- 6. 進站慶祝 -->
+  <section class="scene s-arrive" data-dur="6400" data-sfx="cheer">
+    <img class="fill" src="../圖片/車站月台.png" alt="">
+    <img class="arrive-train" src="assets/trains/train_black_tzechiang.png" alt="">
+    <img class="kid" src="../圖片/慶祝到站小朋友/小朋友01-男孩黃衣.png" alt="">
+    <img class="kid" src="../圖片/慶祝到站小朋友/小朋友02-女孩紅衣.png" alt="">
+    <img class="kid" src="../圖片/慶祝到站小朋友/小朋友03-男孩藍帽.png" alt="">
+    <img class="kid" src="../圖片/慶祝到站小朋友/小朋友04-女孩黃衣.png" alt="">
+    <span class="spark" style="left:46%;top:26%;animation-delay:2.9s">✨</span>
+    <span class="spark" style="left:62%;top:20%;animation-delay:3.2s">✨</span>
+    <span class="spark" style="left:32%;top:22%;animation-delay:3.5s">🎉</span>
+    <div class="arrive-banner">🎊 抵達目的地！</div>
+    <div class="vig"></div>
+    <p class="cap">抵達目的地，<b>全站一起歡呼</b>！<small>每一次進站，都是值得慶祝的冒險</small></p>
+  </section>
+
+  <!-- 7. 有錢貓咪 -->
+  <section class="scene s-rich" data-dur="6800">
+    <div id="coins" aria-hidden="true"></div>
+    <div class="rich-wrap">
+      <div class="rich-cat" style="background:url('assets/avatars/賓士.png') center/cover"><span class="crown">👑</span></div>
+      <div class="amount" id="amount">100萬</div>
+      <div class="amount-label">總資產</div>
+    </div>
+    <p class="cap center">從 100 萬起家，<b>成為鐵道大富翁</b>！<small>買下全台物產，讓資產一路翻倍成長</small></p>
+  </section>
+
+  <!-- 8. 結尾 -->
+  <section class="scene s-end" data-dur="5200">
+    <img class="fill" src="assets/screens/title.jpg" alt="">
+    <div class="end-box">
+      <div><span class="badge">鐵道 · 卡片 · 目的地 · 驚喜</span></div>
+      <div class="logo">下一站，等你出發！</div>
+      <div class="tagline">小球貓電鐵</div>
+    </div>
+    <div class="vig"></div>
+  </section>
+
+  <div id="gate">
+    <div>
+      <div style="text-align:center"><button id="play" type="button">▶ 點擊開始播放</button></div>
+      <p>點擊後以全螢幕播放，約 46 秒</p>
+    </div>
+  </div>
+  <div id="ctl">
+    <button id="again" type="button" title="重新播放">↻</button>
+    <button id="mute" type="button" title="靜音">🔊</button>
+    <button id="pause" type="button" title="暫停">Ⅱ</button>
+  </div>
+  <div id="bar"><i></i></div>
+
+  <!-- 背景音樂：前段輕柔（春），從擲骰起換成輕快（夏）帶動節奏 -->
+  <audio id="bgmA" src="assets/audio/spring.mp3" loop preload="auto"></audio>
+  <audio id="bgmB" src="assets/audio/summer.mp3" loop preload="auto"></audio>
+</main>
+
+<script>
+(() => {
+  const scenes = [...document.querySelectorAll('.scene')];
+  const durations = scenes.map(s => +s.dataset.dur);
+  const TOTAL = durations.reduce((a, b) => a + b, 0);
+  const bar = document.querySelector('#bar i');
+  const gate = document.querySelector('#gate');
+  const btnPause = document.querySelector('#pause');
+  const btnMute = document.querySelector('#mute');
+
+  // ── 音訊 ──────────────────────────────────────────────
+  // 一次性音效（骰子／螺旋槳／歡呼）每次都用新的 Audio，播完自然回收，
+  // 不會因為上一段還沒播完就被下一段切斷。
+  const bgmA = document.querySelector('#bgmA'), bgmB = document.querySelector('#bgmB');
+  const PEAK = new Map([[bgmA, .5], [bgmB, .46]]);
+  let muted = false, fadeT = null, sfx = null;
+
+  function fadeTo(target) {
+    clearInterval(fadeT);
+    fadeT = setInterval(() => {
+      let settled = true;
+      for (const track of PEAK.keys()) {
+        const want = (!muted && track === target) ? PEAK.get(track) : 0;
+        const gap = want - track.volume;
+        if (Math.abs(gap) < .04) track.volume = want;
+        else { track.volume = Math.min(1, Math.max(0, track.volume + Math.sign(gap) * .04)); settled = false; }
+        if (track.volume === 0 && !track.paused) track.pause();
+      }
+      if (settled) clearInterval(fadeT);
+    }, 40);
+    // play() 必須留在使用者手勢的同一個呼叫堆疊裡，前面不能有 await，
+    // 否則手勢授權已結束，會被瀏覽器自動播放政策擋掉（而且是靜默失敗）。
+    if (!muted && target && target.paused) target.play().catch(() => {});
+  }
+  const trackFor = i => (i <= 1 ? bgmA : bgmB);   // 主畫面＋地圖用輕柔曲，其餘用輕快曲
+  function playSfx(name) {
+    if (muted || !name) return;
+    sfx = new Audio(`assets/audio/${name}.mp3`);
+    sfx.volume = name === 'cheer' ? .75 : .55;
+    sfx.play().catch(() => {});
+  }
+  function stopSfx() { if (sfx) { sfx.pause(); sfx = null; } }
+
+  // ── 結尾金幣雨與資產數字 ───────────────────────────────
+  const coinBox = document.querySelector('#coins');
+  for (let i = 0; i < 18; i++) {
+    const c = document.createElement('span');
+    c.className = 'coin';
+    c.textContent = i % 3 === 0 ? '💰' : '🪙';
+    c.style.left = `${(i * 5.6 + (i % 4) * 3.2) % 96}%`;
+    c.style.animationDuration = `${2.3 + (i % 5) * .5}s`;
+    c.style.animationDelay = `${(i % 7) * .35}s`;
+    coinBox.appendChild(c);
+  }
+  const amountEl = document.querySelector('#amount');
+  // 進位規則跟遊戲 data.js 的 formatMoney() 一致（萬→億→兆）
+  function money(wan) {
+    let n = Math.round(Math.abs(wan));
+    const zhao = Math.floor(n / 1e8); n -= zhao * 1e8;
+    const yi = Math.floor(n / 1e4); n -= yi * 1e4;
+    const out = [];
+    if (zhao) out.push(zhao + '兆');
+    if (yi) out.push(yi + '億');
+    if (n || !out.length) out.push(n + '萬');
+    return out.join('');
+  }
+  let countT = null;
+  function runCount() {
+    clearInterval(countT);
+    const t0 = performance.now(), span = 3400, from = 100, to = 88888;
+    countT = setInterval(() => {
+      const p = Math.min(1, (performance.now() - t0) / span);
+      amountEl.textContent = money(from + (to - from) * (1 - Math.pow(1 - p, 3)));  // easeOutCubic
+      if (p >= 1) clearInterval(countT);
+    }, 45);
+  }
+
+  // ── 時間軸 ────────────────────────────────────────────
+  // 用 setTimeout 推進場景，不用 requestAnimationFrame：rAF 在分頁被判定為隱藏時
+  // 會完全停住（實測 0 幀），整支短片會卡在第一段不動；setTimeout 最多只是被降頻。
+  let idx = 0, timer = null, startedAt = 0, leftOver = 0, running = false, done = false;
+
+  function show(i) {
+    scenes[idx].classList.remove('active');
+    idx = i;
+    const sc = scenes[idx];
+    sc.classList.add('active');
+    stopSfx();
+    playSfx(sc.dataset.sfx);
+    if (sc.classList.contains('s-rich')) runCount(); else { clearInterval(countT); amountEl.textContent = money(100); }
+    fadeTo(trackFor(idx));
+  }
+  function elapsedBefore(i) { return durations.slice(0, i).reduce((a, b) => a + b, 0); }
+  function paint() {
+    // 播完之後要固定顯示 100%：這裡是 setInterval 一直在重算寬度，
+    // 若不特別判斷，finish() 寫進去的 100% 會馬上被下一次重算蓋回最後一段的起點百分比。
+    if (done) { bar.style.width = '100%'; return; }
+    const passed = elapsedBefore(idx) + (running ? performance.now() - startedAt : leftOver);
+    bar.style.width = Math.min(100, passed / TOTAL * 100) + '%';
+  }
+  function schedule(ms) {
+    clearTimeout(timer);
+    startedAt = performance.now();
+    running = true; done = false; leftOver = 0;
+    timer = setTimeout(next, ms);
+  }
+  function next() {
+    if (idx >= scenes.length - 1) { finish(); return; }
+    show(idx + 1);
+    schedule(durations[idx]);
+  }
+  function finish() {
+    running = false; done = true;
+    clearTimeout(timer);
+    btnPause.textContent = '▶'; btnPause.title = '播放';
+    for (const t of PEAK.keys()) t.pause();
+    bar.style.width = '100%';
+  }
+
+  function begin() {
+    gate.hidden = true;
+    show(0);                       // show() 內會啟動音樂——必須在點擊的同一個堆疊裡
+    schedule(durations[0]);
+    // 全螢幕放在最後：它是非同步的，先 await 會讓後面的 play() 失去手勢授權
+    if (!document.fullscreenElement) document.querySelector('#film').requestFullscreen?.().catch(() => {});
+  }
+  function replay() {
+    clearTimeout(timer);
+    for (const t of PEAK.keys()) { t.currentTime = 0; }
+    show(0);
+    schedule(durations[0]);
+    btnPause.textContent = 'Ⅱ'; btnPause.title = '暫停';
+  }
+  function togglePause() {
+    if (running) {
+      leftOver = performance.now() - startedAt;
+      running = false; clearTimeout(timer);
+      for (const t of PEAK.keys()) t.pause();
+      if (sfx) sfx.pause();
+      btnPause.textContent = '▶'; btnPause.title = '播放';
+    } else {
+      // 先把「這一段已經播多久」抄下來：schedule() 會把 leftOver 歸零，
+      // 之後再拿它回推 startedAt，進度條才不會在繼續播放時倒退回這一段的開頭。
+      const played = leftOver;
+      schedule(Math.max(0, durations[idx] - played));
+      startedAt = performance.now() - played;
+      fadeTo(trackFor(idx));
+      if (sfx) sfx.play().catch(() => {});
+      btnPause.textContent = 'Ⅱ'; btnPause.title = '暫停';
+    }
+  }
+
+  document.querySelector('#play').addEventListener('click', begin);
+  document.querySelector('#again').addEventListener('click', replay);
+  btnPause.addEventListener('click', togglePause);
+  btnMute.addEventListener('click', () => {
+    muted = !muted;
+    btnMute.textContent = muted ? '🔇' : '🔊';
+    btnMute.title = muted ? '取消靜音' : '靜音';
+    if (muted) { stopSfx(); fadeTo(null); } else fadeTo(trackFor(idx));
+  });
+  addEventListener('keydown', e => {
+    if (gate.hidden === false) return;
+    if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+    if (e.key === 'ArrowRight' && idx < scenes.length - 1) { show(idx + 1); schedule(durations[idx]); }
+    if (e.key === 'ArrowLeft' && idx > 0) { show(idx - 1); schedule(durations[idx]); }
+  });
+  setInterval(paint, 100);   // 進度條獨立更新，跟場景推進解耦
+
+  // 提供給自動化測試：可直接跳到指定場景，不必等真實時間
+  window.__trailer = { show, scenes, get index() { return idx; } };
+})();
+</script>
+</body>
+</html>

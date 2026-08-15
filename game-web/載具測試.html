@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>載具測試版 — 小球貓電鐵</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #0C1A28; --panel: #172B40cc; --rim: #254663;
+    --amber: #F0A020; --text: #D4E6F4; --lo: #5E84A4;
+    --ui: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  }
+  html, body { width:100%; height:100%; overflow:hidden; background:var(--navy); font-family:var(--ui); color:var(--text); }
+  #game { position:fixed; inset:0; width:100%; height:100%; display:block; cursor:grab; }
+
+  #panel {
+    position:fixed; top:14px; left:14px; z-index:10; width:280px;
+    background:var(--panel); border:1px solid var(--rim); border-radius:10px;
+    padding:14px; backdrop-filter:blur(6px);
+  }
+  #panel h1 { font-size:15px; color:var(--amber); letter-spacing:.05em; margin-bottom:10px; }
+  .grp-label { font-size:11px; color:var(--lo); margin:10px 0 6px; letter-spacing:.05em; }
+  .vbtn-row { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .vbtn {
+    font-family:var(--ui); font-size:12.5px; padding:7px 4px; border-radius:8px; cursor:pointer;
+    background:#1C3450; border:1.5px solid var(--rim); color:var(--text); text-align:center;
+  }
+  .vbtn:hover { border-color:var(--amber); }
+  .vbtn.active { background:var(--amber); color:#20150a; border-color:var(--amber); font-weight:700; }
+  #colorRow { display:flex; gap:6px; margin-top:6px; }
+  .cbtn { width:26px; height:26px; border-radius:50%; border:2px solid rgba(255,255,255,.25); cursor:pointer; }
+  .cbtn.active { border-color:#fff; box-shadow:0 0 0 2px var(--amber); }
+  #hint { font-size:11.5px; color:var(--lo); margin-top:12px; line-height:1.6; }
+  #curInfo { font-size:12px; margin-top:10px; padding:8px 10px; background:#0F2035; border-radius:8px; }
+  #curInfo b { color:var(--amber); }
+  #btn-zoom {
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%); z-index:10;
+    height:44px; padding:0 16px; font-size:13px; font-family:var(--ui);
+    background:var(--panel); color:var(--text); border:1px solid var(--rim); border-radius:22px; cursor:pointer;
+  }
+  #toast {
+    position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(16px); z-index:20;
+    background:var(--panel); border:1px solid var(--rim); color:var(--text);
+    padding:8px 18px; border-radius:20px; font-size:13px; opacity:0; transition:all .25s;
+    backdrop-filter:blur(6px); white-space:nowrap; pointer-events:none;
+  }
+  #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="panel">
+  <h1>🚉 載具測試版</h1>
+
+  <div class="grp-label">列車（兩截車廂）</div>
+  <div class="vbtn-row" id="trainBtns">
+    <div class="vbtn" data-mode="train" data-train="local_old">普通車（舊）</div>
+    <div class="vbtn" data-mode="train" data-train="local">普通車（正式）</div>
+    <div class="vbtn" data-mode="train" data-train="express">區間快車</div>
+    <div class="vbtn" data-mode="train" data-train="tzechiang_old">自強號（舊）</div>
+    <div class="vbtn" data-mode="train" data-train="tzechiang">自強號（普悠瑪・正式）</div>
+    <div class="vbtn" data-mode="train" data-train="hsr_old">高鐵（舊）</div>
+    <div class="vbtn" data-mode="train" data-train="hsr">高鐵（正式）</div>
+    <div class="vbtn" data-mode="train" data-train="tourism">觀光號</div>
+  </div>
+
+  <div class="grp-label">普通車 Q 版候選（AI 產圖，還沒決定用哪個）</div>
+  <div class="vbtn-row" id="qTrainBtns">
+    <div class="vbtn" data-mode="train" data-train="q_a">Q版 A（有笑臉）</div>
+    <div class="vbtn" data-mode="train" data-train="q_b">Q版 B（無表情）</div>
+    <div class="vbtn" data-mode="train" data-train="q_c">Q版 C（黑框線稿）</div>
+  </div>
+
+  <div class="grp-label">扁平風候選（列車.jpg 切出來，還沒決定用哪個）</div>
+  <div class="vbtn-row" id="flatTrainBtns">
+    <div class="vbtn" data-mode="train" data-train="flat_local">扁平・慢車</div>
+    <div class="vbtn" data-mode="train" data-train="flat_hsr">扁平・高鐵</div>
+    <div class="vbtn" data-mode="train" data-train="flat_express">扁平・快車</div>
+    <div class="vbtn" data-mode="train" data-train="flat_tzechiang">扁平・自強號</div>
+  </div>
+
+  <div class="grp-label">黑邊重繪候選（列車-黑邊.png 切出來，本身已有黑色描邊）</div>
+  <div class="vbtn-row" id="blackTrainBtns">
+    <div class="vbtn" data-mode="train" data-train="black_local">黑邊・慢車</div>
+    <div class="vbtn" data-mode="train" data-train="black_hsr">黑邊・高鐵</div>
+    <div class="vbtn" data-mode="train" data-train="black_express">黑邊・快車</div>
+    <div class="vbtn" data-mode="train" data-train="black_tzechiang">黑邊・自強號</div>
+  </div>
+
+  <div class="grp-label">單一圖示（不分車廂）</div>
+  <div class="vbtn-row" id="singleBtns">
+    <div class="vbtn" data-mode="ship">遊輪</div>
+    <div class="vbtn" data-mode="plane">飛機</div>
+  </div>
+
+  <div class="grp-label">玩家顏色</div>
+  <div id="colorRow"></div>
+
+  <div id="curInfo">目前：<b id="curLabel">普通車（舊）</b></div>
+  <div id="hint">方向鍵 ←↑↓→：往該方向沿路網走一步（按住連續走）。<br>或點地圖上任一站，棋子會沿路網走過去。滾輪縮放、拖曳平移。</div>
+</div>
+
+<button id="btn-zoom">🔍 全島 / 近景</button>
+<div id="toast"></div>
+
+<script src="map_data.js?v=61"></script>
+<script src="src/data.js?v=61"></script>
+<script src="src/board.js?v=61"></script>
+<script src="src/render.js?v=67"></script>
+<script>
+// ────────────────────────────────────────────────
+//  vehicle_test.html 專用小腳本：不載入 rules.js/ui.js/audio.js，
+//  自己造一個最小的 Game stub 給 render.js 的防呆判斷用（typeof Game !== 'undefined'）
+// ────────────────────────────────────────────────
+const COLORS = ['#F08C00', '#3A3A3A', '#2B7FD4', '#E53935', '#43A047'];
+
+const testPlayer = {
+  color: COLORS[0], train: 'local', vehicleMode: 'train',
+  pos: null, ax: 0, ay: 0, trail: [],
+};
+
+window.Game = {
+  players: [testPlayer], cur: 0, month: 6, state: 'idle', destination: null,
+  curPlayer() { return testPlayer; },
+};
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+function bfsPath(from, to) {
+  if (from === to) return [from];
+  const prev = new Map([[from, null]]);
+  const q = [from];
+  while (q.length) {
+    const n = q.shift();
+    for (const nb of Board.neighbors(n)) {
+      if (prev.has(nb)) continue;
+      prev.set(nb, n);
+      if (nb === to) {
+        const path = [nb];
+        let cur = n;
+        while (cur !== null) { path.push(cur); cur = prev.get(cur); }
+        return path.reverse();
+      }
+      q.push(nb);
+    }
+  }
+  return null;
+}
+
+let walking = false;
+function walkPath(path, idx) {
+  if (idx >= path.length - 1) { walking = false; return; }
+  walking = true;
+  const pts = Data.edgePath(path[idx], path[idx + 1]);
+  Render.movePiece(testPlayer, pts, 240, () => {
+    testPlayer.pos = path[idx + 1];
+    testPlayer.trail.push(...pts.slice(1));
+    if (testPlayer.trail.length > 60) testPlayer.trail.splice(0, testPlayer.trail.length - 60);
+    walkPath(path, idx + 1);
+  });
+}
+
+function nearestStation(wx, wy, maxDist) {
+  let best = null, bestD = maxDist;
+  Data.stations.forEach((s, id) => {
+    const d = Math.hypot(s.x - wx, s.y - wy);
+    if (d < bestD) { bestD = d; best = id; }
+  });
+  return best;
+}
+
+// 方向鍵移動：往按鍵方向的相鄰站走一步（用該段路線第一段的出發方向判斷方向，
+// 跟正式遊戲岔路箭頭的角度判斷同一套邏輯）。路網都是正交（上下左右），同方向 diff≈0
+const DIR_ANG = { ArrowRight: 0, ArrowDown: Math.PI/2, ArrowLeft: Math.PI, ArrowUp: -Math.PI/2 };
+function stepDir(key) {
+  if (walking || !testPlayer.pos) return;
+  const want = DIR_ANG[key];
+  const from = testPlayer.pos;
+  const F = Data.stations.get(from);
+  let best = null, bestDiff = Infinity;
+  for (const nb of Board.neighbors(from)) {
+    const pts = Data.edgePath(from, nb);
+    if (!pts || pts.length < 2) continue;
+    const ang = Math.atan2(pts[1].y - F.y, pts[1].x - F.x);
+    const diff = Math.abs(Math.atan2(Math.sin(ang - want), Math.cos(ang - want)));
+    if (diff < bestDiff) { bestDiff = diff; best = nb; }
+  }
+  if (best && bestDiff < 0.6) {   // 約 34 度內視為同方向（正交路網實際只會是 0）
+    Render.freeLook = false;
+    walkPath([from, best], 0);
+  } else {
+    toast('這個方向沒有路');
+  }
+}
+
+addEventListener('DOMContentLoaded', () => {
+  Data.load();
+  const canvas = document.getElementById('game');
+  Render.init(canvas);
+
+  // 開場先擺在一個台鐵大站，方便馬上開始點別的站測試
+  const startId = [...Data.stations.keys()].find(id => Data.stations.get(id).name === '台北') || [...Data.stations.keys()][0];
+  const st0 = Data.stations.get(startId);
+  testPlayer.pos = startId; testPlayer.ax = st0.x; testPlayer.ay = st0.y; testPlayer.trail = [{x: st0.x, y: st0.y}];
+  Render.snapTo(st0.x, st0.y);
+  Render.cam.tscale = Render.ZOOM_NEAR; Render.cam.scale = Render.ZOOM_NEAR;
+
+  // 點擊地圖：轉換螢幕座標→世界座標，找最近站點，沿路網走過去
+  canvas.addEventListener('click', e => {
+    if (Render.drag) return; // mouseup 已經把 drag 清空了，這裡多一層防呆避免拖曳誤觸
+    if (walking) { toast('還在移動中，等到站再點'); return; }
+    const rect = canvas.getBoundingClientRect();
+    const cssX = e.clientX - rect.left, cssY = e.clientY - rect.top;
+    const wx = (cssX - canvas.clientWidth / 2) / Render.cam.scale + Render.cam.x;
+    const wy = (cssY - canvas.clientHeight / 2) / Render.cam.scale + Render.cam.y;
+    const target = nearestStation(wx, wy, 40);
+    if (!target) { toast('這附近沒有站點'); return; }
+    if (!testPlayer.pos) {
+      const st = Data.stations.get(target);
+      testPlayer.pos = target; testPlayer.ax = st.x; testPlayer.ay = st.y; testPlayer.trail = [{x: st.x, y: st.y}];
+      Render.snapTo(st.x, st.y);
+      return;
+    }
+    if (target === testPlayer.pos) return;
+    const path = bfsPath(testPlayer.pos, target);
+    if (!path) { toast('這個站走不到（路網不通）'); return; }
+    Render.freeLook = false;
+    walkPath(path, 0);
+  });
+
+  document.getElementById('btn-zoom').onclick = () => Render.toggleZoom();
+
+  // 鍵盤上下左右：往該方向沿路網走一步（按住靠作業系統的鍵盤重複觸發連續前進）
+  addEventListener('keydown', e => {
+    if (e.key in DIR_ANG) { e.preventDefault(); stepDir(e.key); }
+  });
+
+  // 載具切換按鈕
+  const setActive = btn => {
+    document.querySelectorAll('.vbtn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('curLabel').textContent = btn.textContent;
+  };
+  document.querySelectorAll('#trainBtns .vbtn, #qTrainBtns .vbtn, #flatTrainBtns .vbtn, #blackTrainBtns .vbtn, #singleBtns .vbtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode;
+      testPlayer.vehicleMode = mode;
+      if (mode === 'train') testPlayer.train = btn.dataset.train;
+      setActive(btn);
+    });
+  });
+  document.querySelector('#trainBtns .vbtn[data-train="local"]').classList.add('active');
+
+  // 顏色切換
+  const colorRow = document.getElementById('colorRow');
+  COLORS.forEach((c, i) => {
+    const b = document.createElement('div');
+    b.className = 'cbtn' + (i === 0 ? ' active' : '');
+    b.style.background = c;
+    b.addEventListener('click', () => {
+      testPlayer.color = c;
+      colorRow.querySelectorAll('.cbtn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+    colorRow.appendChild(b);
+  });
+});
+</script>
+</body>
+</html>
