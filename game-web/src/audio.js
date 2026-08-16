@@ -70,11 +70,43 @@ const BGM = {
 const SFX = {
   volume: 0.7,
   muted: false,
+  KEYS: ['dice'],     // 走這裡播放的一次性音效（cheer／heli 有自己的 <audio> 元素，不在此列）
+  els: {},
+
+  // iOS 的規則是「每一個 Audio 元素」都必須先在使用者手勢裡播放過才會解鎖，不是「整個網頁」
+  // 解鎖一次就好。舊版的 play() 每次都 new Audio()，等於每次都是一個全新、沒解鎖過的元素，
+  // 在 iPhone 上永遠播不出聲音（桌機沒有這個限制，所以一直沒被發現）。
+  // 改成預先建立、重複使用同一個元素，並在第一次使用者手勢時靜音播一次把它解鎖。
+  init() {
+    this.KEYS.forEach(key => {
+      const el = new Audio(`assets/audio/${key}.mp3`);
+      el.preload = 'auto';
+      this.els[key] = el;
+    });
+    const unlock = () => {
+      Object.values(this.els).forEach(el => {
+        const v = el.volume;
+        el.volume = 0;
+        el.play().then(() => {
+          el.pause(); el.currentTime = 0; el.volume = v;
+        }).catch(() => { el.volume = v; });
+      });
+      removeEventListener('touchend', unlock);
+      removeEventListener('click', unlock);
+      removeEventListener('keydown', unlock);
+    };
+    addEventListener('touchend', unlock);
+    addEventListener('click', unlock);
+    addEventListener('keydown', unlock);
+  },
+
   play(key) {
     if (this.muted) return;
-    const el = new Audio(`assets/audio/${key}.mp3`);
+    const el = this.els[key];
+    if (!el) return;
     el.volume = this.volume;
-    el.play().catch(() => {});   // 音效檔還沒放進去或被 autoplay 政策擋下時，靜默失敗
+    el.currentTime = 0;   // 重複使用同一個元素，要倒帶才能連續再播一次
+    el.play().catch(() => {});   // 還沒解鎖或被 autoplay 政策擋下時，靜默失敗
   },
 
   // 「按 A 才能繼續」的提示（到站慶祝、年度決算）沒有現成的音效檔，用 Web Audio 直接合成
