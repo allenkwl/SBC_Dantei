@@ -83,13 +83,16 @@ const SFX = {
       el.preload = 'auto';
       this.els[key] = el;
     });
+    // 用 volume=0 靜音再 play() 曾經在部分手機瀏覽器上失效：volume 的變更跟 play() 的
+    // 實際發聲之間有極短的競速空檔，播放起點偶爾會用舊的（非零）音量先出聲一瞬間，
+    // 短促的音效（例如骰子聲）聽起來就像「一開頁就有音效」。改用 muted 屬性靜音——
+    // 這是瀏覽器原生的硬靜音開關，在真正開始播放之前就已經生效，沒有這個競速問題。
     const unlock = () => {
       Object.values(this.els).forEach(el => {
-        const v = el.volume;
-        el.volume = 0;
+        el.muted = true;
         el.play().then(() => {
-          el.pause(); el.currentTime = 0; el.volume = v;
-        }).catch(() => { el.volume = v; });
+          el.pause(); el.currentTime = 0; el.muted = false;
+        }).catch(() => { el.muted = false; });
       });
       removeEventListener('touchend', unlock);
       removeEventListener('click', unlock);
