@@ -4,7 +4,7 @@
 //  所以額外掛了「使用者第一次點擊或按鍵」的解鎖邏輯，確保之後都能正常播放
 // ────────────────────────────────────────────────
 const BGM = {
-  KEYS: ['splash', 'setup', 'spring', 'summer', 'autumn', 'winter', 'debt', 'sea', 'plane'],
+  KEYS: ['splash', 'setup', 'lobby', 'spring', 'summer', 'autumn', 'winter', 'debt', 'sea', 'plane'],
   SEASON_KEY: {'春天': 'spring', '夏天': 'summer', '秋天': 'autumn', '冬天': 'winter'},
 
   els: {},

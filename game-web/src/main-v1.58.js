@@ -467,6 +467,28 @@ addEventListener('DOMContentLoaded', () => {
   const AI_LABEL = ['', '基礎', '中等', '高手'];
   let pendingStart = null;
 
+  // 把「全部貓咪」的狀態裁成真正要玩的人數。純計算、不碰任何本機狀態，
+  // 同一份輸入一定得到同一份輸出——只有群主會呼叫它，算完就寫回 Firebase 當權威。
+  // 有人認領的一定保留，剩下的名額照原順序補電腦；認領的 index 一併換算成裁切後的新位置。
+  function trimStateForStart(data, claims) {
+    const out = JSON.parse(JSON.stringify(data));
+    const want = out.netPlayerCount;
+    delete out.netPlayerCount;
+    if (!want || !out.players || out.players.length <= want) return {data: out, claims: claims || {}};
+    const claimedIdx = Object.keys(claims || {}).map(Number)
+      .filter(i => i >= 0 && i < out.players.length).sort((a, b) => a - b);
+    const rest = out.players.map((_, i) => i).filter(i => !claimedIdx.includes(i));
+    const keep = claimedIdx.concat(rest).slice(0, want).sort((a, b) => a - b);
+    const remap = new Map(keep.map((o, n) => [o, n]));
+    out.players = keep.map(i => out.players[i]);
+    const nc = {};
+    Object.keys(claims || {}).forEach(k => {
+      const n = remap.get(Number(k));
+      if (n != null) nc[n] = claims[k];
+    });
+    return {data: out, claims: nc};
+  }
+
   const Pick = {
     mode: 'new', count: 4, opts: null,
     slot: null, data: null,
@@ -830,8 +852,26 @@ addEventListener('DOMContentLoaded', () => {
         const box = document.getElementById('pick-net-ready');
         box.style.display = '';
         box.textContent = `已準備 ${n}／${netMemberCount} 人`;
-        Net.tryFinalizeStart(netMemberCount);
+        if (Net.isHost) this.hostStartWhenAllReady(n);
       });
+    },
+
+    // 大家都準備好之後，「最終要玩的是哪幾個角色」只由群主算一次、寫上去。
+    // 以前是每台自己算裁切結果（trimNetPlayers），但各台收到認領資料的時間不一定一樣——
+    // 只要有一台在別人的認領還沒同步過來時就開始算，兩邊算出來的玩家清單就不同，
+    // 玩家 index 一錯位，第一個回合就完全對不起來（使用者回報的「第一輪就不同步」）。
+    // 改成群主一台定案：讀 Firebase 上的認領（權威來源）→ 裁切 → 上傳狀態 →
+    // 改寫認領 index → 最後才把狀態切成 started，其他人照著載入就好。
+    netFinalizing: false,
+    hostStartWhenAllReady(readyCount) {
+      if (this.netFinalizing || readyCount < netMemberCount) return;
+      this.netFinalizing = true;
+      Net.readClaims().then(claims => {
+        const t = trimStateForStart(this.data, claims);
+        return Net.uploadState(t.data)
+          .then(() => Net.replaceClaims(t.claims))
+          .then(() => Net.setStatus('started'));
+      }).catch(() => { this.netFinalizing = false; });
     },
     // 狀態變成 started 時由 openRoom 的 watchRoom 呼叫（那個監聽從進房間就一直掛著，
     // 涵蓋選角畫面全程）。這裡才是連線對戰真正「進遊戲」的地方，所有裝置同時執行。
@@ -839,62 +879,35 @@ addEventListener('DOMContentLoaded', () => {
       if (this.netStarted) return;
       this.netStarted = true;
       Net.unwatchReady();
-      this.trimNetPlayers();
-      this.data.players.forEach((p, i) => {
-        p.isAI = !this.claims.has(i);
-        if (p.isAI && !p.aiLevel) p.aiLevel = 1;
+      // 一律以 Firebase 上那份為準：群主已經裁切好、認領 index 也換算好了。
+      // 每台載入的是同一份資料，不再各自計算，從源頭杜絕玩家清單不一致。
+      Promise.all([Net.downloadState(), Net.readClaims()]).then(([data, claims]) => {
+        if (!data) { UI.toast('讀不到這一局的資料'); this.netStarted = false; return; }
+        this.data = data;
+        this.netClaims = claims || {};
+        // 從權威認領反推「哪幾個角色是這台在操作」
+        this.claims.clear();
+        Object.keys(this.netClaims).forEach(k => {
+          if (this.netClaims[k] && this.netClaims[k].id === Net.clientId) this.claims.set(Number(k), SRC_MOUSE);
+        });
+        this.data.players.forEach((p, i) => {
+          p.isAI = !this.claims.has(i);
+          if (p.isAI && !p.aiLevel) p.aiLevel = 1;
+        });
+        const sources = this.data.players.map((p, i) => this.claims.get(i) || null);
+        this.close();
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('splash').style.display = 'none';
+        document.getElementById('net-room').style.display = 'none';
+        this.data.netName = Net.groupName;
+        // 先把認領交給 Game 再載入：loadState 結尾就會呼叫 maybeAutoRoll，
+        // 那時候驅動者判定就要能查到正確的認領資料。
+        Game.netClaims = this.netClaims;
+        OnlineSave.write(this.netGroup, this.data);
+        Game.loadState(this.data, {netGroup: this.netGroup, netGroupName: Net.groupName});
+        startNetSync();
+        Seats.activate(sources);
       });
-      const sources = this.data.players.map((p, i) => this.claims.get(i) || null);
-      this.close();
-      document.getElementById('setup').style.display = 'none';
-      document.getElementById('splash').style.display = 'none';
-      document.getElementById('net-room').style.display = 'none';
-      // 年數不由這裡決定（沿用群主上傳的狀態），存檔寫進以群組名為 key 的連線存檔區，
-      // 之後每年三月底 Game.autoSave() 也會自動寫回同一個 key。
-      this.data.netName = Net.groupName;   // 存檔列表要顯示原本的群組名，不是轉換過的 key
-      // 先直接把認領資料交給 Game，不要等 startNetSync 的訂閱回來——第一個回合可能
-      // 在那之前就開始跑了，那時 Game.netClaims 還是空的，驅動者會判定錯。
-      Game.netClaims = this.netClaims || {};
-      OnlineSave.write(this.netGroup, this.data);
-      Game.loadState(this.data, {netGroup: this.netGroup, netGroupName: Net.groupName});
-      startNetSync();
-      Seats.activate(sources);
-    },
-
-    // 連線開新局時，群主上傳的狀態裡放的是「全部」的貓咪，讓大家跟單機版一樣能從
-    // 八隻裡挑（見 rules.js 的 buildFreshState）；真正要玩幾個角色寫在 netPlayerCount。
-    // 這裡在正式開局前把玩家裁到那個人數：有人認領的一定留下，剩下的名額照原本順序
-    // 補電腦，多的就拿掉。
-    //
-    // 每台裝置都是拿同一份 data、同一份認領資料、用同一套規則算，結果一定一致——
-    // 這點很重要，裁完之後玩家的 index 會變，各台要是算出不同的順序，之後同步過來的
-    // 「輪到第 n 位」就會對到不同的人。所以這裡刻意不用任何亂數或本機狀態。
-    trimNetPlayers() {
-      const want = this.data.netPlayerCount;
-      if (!want || !this.data.players || this.data.players.length <= want) return;
-      const claimedIdx = Object.keys(this.netClaims || {}).map(Number)
-        .filter(i => i >= 0 && i < this.data.players.length).sort((a, b) => a - b);
-      const rest = this.data.players.map((_, i) => i).filter(i => !claimedIdx.includes(i));
-      // 認領的優先保留，不夠的名額才照原順序補電腦；最後照原順序排，玩家的先後才穩定
-      const keep = claimedIdx.concat(rest).slice(0, want).sort((a, b) => a - b);
-      this.data.players = keep.map(i => this.data.players[i]);
-      // 認領資料的 index 要跟著換算成裁切後的新位置，否則開局後會對到別的角色
-      const remap = new Map(keep.map((oldIdx, newIdx) => [oldIdx, newIdx]));
-      const oldClaims = this.claims;
-      this.claims = new Map();
-      for (const [oldIdx, src] of oldClaims) {
-        if (remap.has(oldIdx)) this.claims.set(remap.get(oldIdx), src);
-      }
-      const oldNet = this.netClaims || {};
-      this.netClaims = {};
-      Object.keys(oldNet).forEach(k => {
-        const ni = remap.get(Number(k));
-        if (ni != null) this.netClaims[ni] = oldNet[k];
-      });
-      // Firebase 上那份也要跟著改寫成新 index，不然開局後訂閱一回來就把本機算好的
-      // 換算結果蓋回舊 index，驅動者判定與斷線暫停都會對到錯的角色。
-      if (Net.isHost) Net.replaceClaims(this.netClaims);
-      delete this.data.netPlayerCount;   // 裁過就不需要了，別留在存檔裡下次又裁一次
     },
 
     // ── 連線的認領 ──
