@@ -65,42 +65,58 @@ const BGM = {
   },
 };
 
-// 一次性音效（擲骰子等）：跟 BGM 分開管理，不會互相蓋掉、不循環播放。
-// 每次 play() 都用新的 Audio 物件，允許同一個音效在還沒播完時就重疊再播一次（例如連續擲骰）。
+// 一次性音效（擲骰子等）：走 Web Audio API，不再用 <audio> 元素。
+//
+// 為什麼不用 <audio>：iOS 的限制是「每一個 Audio 元素」都必須先在使用者手勢裡播放過
+// 才會解鎖，而擲骰是遊戲邏輯（計時器、電腦決策）觸發的，不是使用者按下去的那一刻，
+// 元素永遠等不到屬於自己的手勢。舊解法是「第一次觸控時靜音播一次」把它騙過去——
+// 等於在主畫面偷播一次骰子聲，全靠靜音壓住，靜音時機一旦沒抓準就漏音。
+// 前後修過兩次（v1.73 改用 muted、v1.81 改成解鎖全程不解除靜音）都只是治標，
+// 真正的問題是「為了解鎖而去播一個不想被聽到的聲音」這件事本身。
+//
+// Web Audio 沒有這個問題：整個 AudioContext 只要在手勢裡 resume() 一次就全部解鎖，
+// 不必逐個元素處理，也**不需要播出任何東西**，所以主畫面完全不會有聲音。
+// 附帶好處是每次播放都是新的 source node，連續擲骰可以自然重疊；共用一個 <audio>
+// 元素時得先倒帶，會把前一聲直接切斷。
+// （下面的 ping() 本來就是這樣做的，這次只是讓其餘音效跟它一致。）
 const SFX = {
   volume: 0.7,
   muted: false,
   KEYS: ['dice'],     // 走這裡播放的一次性音效（cheer／heli 有自己的 <audio> 元素，不在此列）
-  els: {},
-  _priming: new Set(),   // 還在解鎖流程中的元素（見 init 的說明）
+  buffers: {},        // 解碼後的音訊，播放時直接取用，不再碰網路
+  _ctx: null,
 
-  // iOS 的規則是「每一個 Audio 元素」都必須先在使用者手勢裡播放過才會解鎖，不是「整個網頁」
-  // 解鎖一次就好。舊版的 play() 每次都 new Audio()，等於每次都是一個全新、沒解鎖過的元素，
-  // 在 iPhone 上永遠播不出聲音（桌機沒有這個限制，所以一直沒被發現）。
-  // 改成預先建立、重複使用同一個元素，並在第一次使用者手勢時靜音播一次把它解鎖。
+  _ensureCtx() {
+    if (!this._ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      try { this._ctx = new AC(); } catch (_) { return null; }
+    }
+    return this._ctx;
+  },
+  // 手勢解鎖：AudioContext 剛建立時是 suspended，resume 一次之後整個 context
+  // （含之後才建立的 source node）都能出聲。播放前也順手再確認一次，涵蓋
+  // 「使用者用手把按鍵開始、沒觸發到下面那三個事件」之類的邊角情況。
+  _resume(ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); },
+
   init() {
+    const ctx = this._ensureCtx();
+    if (!ctx) return;
+    // 音檔抓下來解碼存著。decodeAudioData 在 context 還是 suspended 時一樣能執行，
+    // 所以不用等使用者互動就能先準備好。
     this.KEYS.forEach(key => {
-      const el = new Audio(`assets/audio/${key}.mp3`);
-      el.preload = 'auto';
-      this.els[key] = el;
+      fetch(`assets/audio/${key}.mp3`)
+        .then(res => res.arrayBuffer())
+        .then(buf => new Promise((resolve, reject) => {
+          // Safari 舊版只支援 callback 形式，新版回傳 Promise，兩種都接
+          const ret = ctx.decodeAudioData(buf, resolve, reject);
+          if (ret && ret.then) ret.then(resolve, reject);
+        }))
+        .then(decoded => { this.buffers[key] = decoded; })
+        .catch(() => {});   // 檔案缺了就是這個音效沒聲音，不影響遊戲進行
     });
-    // 解鎖流程「全程保持靜音」，不在這裡解除——這是手機上第一次觸控仍會聽到一聲骰子的
-    // 原因：之前是在 play() 的 .then() 裡 `pause(); muted = false`，但 iOS 上 pause()
-    // 不是立即生效的，元素在被解除靜音的那一瞬間還在出聲，短促的骰子音就這樣漏了出來。
-    // 改成解鎖只負責「靜音播一次讓元素通過 iOS 的每元素手勢限制」，真正要出聲時
-    // （SFX.play）才解除靜音，中間完全沒有「已解除靜音卻還在播」的空窗。
-    // _priming 記著哪些元素還在解鎖流程中：萬一解鎖的 .then() 比真正的播放晚回來，
-    // 也不會把玩家真正要聽的那一聲 pause 掉。
     const unlock = () => {
-      Object.values(this.els).forEach(el => {
-        el.muted = true;
-        this._priming.add(el);
-        el.play().then(() => {
-          if (!this._priming.has(el)) return;   // 已經被真正的播放接管，不要插手
-          el.pause(); el.currentTime = 0;
-          this._priming.delete(el);
-        }).catch(() => { this._priming.delete(el); });
-      });
+      this._resume(ctx);
       removeEventListener('touchend', unlock);
       removeEventListener('click', unlock);
       removeEventListener('keydown', unlock);
@@ -112,22 +128,26 @@ const SFX = {
 
   play(key) {
     if (this.muted) return;
-    const el = this.els[key];
-    if (!el) return;
-    this._priming.delete(el);   // 從解鎖流程手上接管這個元素
-    el.muted = false;           // 真的要出聲了才解除靜音
-    el.volume = this.volume;
-    el.currentTime = 0;   // 重複使用同一個元素，要倒帶才能連續再播一次
-    el.play().catch(() => {});   // 還沒解鎖或被 autoplay 政策擋下時，靜默失敗
+    const ctx = this._ensureCtx();
+    const buf = this.buffers[key];
+    if (!ctx || !buf) return;   // 還沒解碼完就這次不播，不卡住遊戲流程
+    this._resume(ctx);
+    const src = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    src.buffer = buf;
+    gain.gain.value = this.volume;
+    src.connect(gain); gain.connect(ctx.destination);
+    src.start(0);   // 每次都是新的 source node，可以跟前一聲重疊
   },
 
   // 「按 A 才能繼續」的提示（到站慶祝、年度決算）沒有現成的音效檔，用 Web Audio 直接合成
   // 一聲短短的「叮鈴」提示音（兩個音階、快速上揚），不用另外準備素材檔案。
-  _ctx: null,
   ping() {
     if (this.muted) return;
+    const ctx = this._ensureCtx();
+    if (!ctx) return;
+    this._resume(ctx);
     try {
-      const ctx = this._ctx || (this._ctx = new (window.AudioContext || window.webkitAudioContext)());
       const now = ctx.currentTime;
       [[880, 0], [1318.5, .09]].forEach(([freq, delay]) => {
         const osc = ctx.createOscillator(), gain = ctx.createGain();
