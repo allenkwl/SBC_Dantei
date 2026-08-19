@@ -629,6 +629,13 @@ const Net = {
       return t;
     }).catch(() => {});
   },
+  // 群主是誰，以 Firebase 上那份為準。本機的 Net.hostId 是 watchRoom 回來才填的，
+  // 交接 token 給電腦代跑者時不能只信它（見 rules 的 handOffToken）。
+  readHostId() {
+    if (!this.groupKey) return Promise.resolve(null);
+    return this.db.ref('groups/' + this.groupKey + '/host').once('value')
+      .then(s => s.val() || null).catch(() => null);
+  },
   clearToken(key) {
     const k = key || this.groupKey;
     if (!k) return Promise.resolve();
