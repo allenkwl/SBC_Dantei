@@ -1,65 +1,89 @@
 // ────────────────────────────────────────────────
-//  audio.js — 背景音樂：開場／選人數／遊戲中依季節切換
-//  瀏覽器的自動播放限制：頁面載入時嘗試播放可能會被瀏覽器擋下（合法行為），
-//  所以額外掛了「使用者第一次點擊或按鍵」的解鎖邏輯，確保之後都能正常播放
+//  audio.js — 背景音樂：開場／選人數／遊戲大廳／選角／遊戲中依季節切換
 // ────────────────────────────────────────────────
+// 只用「一個」<audio> 元素，換曲子是換它的 src，不是每首歌各配一個元素。
+//
+// 為什麼：iOS 的自動播放限制是綁在**元素**上的——每一個 Audio 元素都要自己在
+// 使用者手勢裡播放過一次才會解鎖。舊寫法一首歌一個元素，而解鎖處理只在第一次
+// 點擊時播「當下那一首」（開場曲）然後就把監聽器拆掉，於是只有開場曲那個元素
+// 是解鎖的。其餘幾首能不能響，全看它第一次被播的時候剛好在不在手勢裡：
+//   ‧ 大廳曲：使用者點「連線」→ 同一個 click 處理函式裡就播，所以會響
+//   ‧ 選角曲：手機這一端是「群主按了開始，Firebase 推過來」才進選角畫面，
+//             整條呼叫鏈都在非同步回呼裡，沒有任何手勢——被擋下、靜音
+//             （使用者回報的「手機選角 BGM 沒出來」）
+// 這跟 SFX 當初碰到的是同一個限制，處理方式也一樣：把「要解鎖的東西」收斂成
+// 一個，就不會有「這一個忘了解鎖」的漏洞。
+//
+// 另外，被擋下時不再是「開場解鎖一次就算了」，而是每次播放失敗都重新掛一次
+// 一次性的手勢監聽，等使用者下一次碰畫面再補播。選角畫面本來就要點貓咪，
+// 音樂在第一次互動時自然就接上了。
 const BGM = {
   KEYS: ['splash', 'setup', 'lobby', 'character_select', 'spring', 'summer', 'autumn', 'winter', 'debt', 'sea', 'plane'],
   SEASON_KEY: {'春天': 'spring', '夏天': 'summer', '秋天': 'autumn', '冬天': 'winter'},
 
-  els: {},
+  el: null,
   current: null,
   volume: 0.5,
   muted: false,
-  _unlocked: false,
+  _armed: false,
 
   init() {
-    this.KEYS.forEach(key => {
-      const el = new Audio(`assets/audio/${key}.mp3`);
-      el.loop = true;
-      el.volume = this.volume;
-      el.preload = 'auto';
-      this.els[key] = el;
-    });
-    // 第一次使用者手勢時，把當下該播的那首補播出來（處理 autoplay 被瀏覽器擋下的情況）
-    const unlock = () => {
-      this._unlocked = true;
-      if (this.current && !this.muted) this.els[this.current].play().catch(() => {});
-      removeEventListener('click', unlock);
-      removeEventListener('keydown', unlock);
-    };
-    addEventListener('click', unlock);
-    addEventListener('keydown', unlock);
+    const el = new Audio();
+    el.loop = true;
+    el.volume = this.volume;
+    el.preload = 'auto';   // 還沒指定 src，真正的下載是 play() 時才開始
+    this.el = el;
   },
 
   play(key) {
-    if (!this.els[key] || this.current === key) return;
-    if (this.current && this.els[this.current]) {
-      this.els[this.current].pause();
-      this.els[this.current].currentTime = 0;
-    }
+    if (!this.el || this.current === key || this.KEYS.indexOf(key) < 0) return;
     this.current = key;
-    if (this.muted) return;
-    this.els[key].volume = this.volume;
-    this.els[key].play().catch(() => {});   // 被 autoplay 政策擋下時，靜默失敗，等待使用者手勢解鎖
+    // 換 src 本身就會停掉前一首並從頭開始，不用另外 pause() 與歸零 currentTime
+    this.el.src = `assets/audio/${key}.mp3`;
+    this.el.volume = this.volume;
+    if (this.muted) { this.el.pause(); return; }
+    this._start();
   },
 
   playSeason(month) {
     this.play(this.SEASON_KEY[Data.seasonOf(month)]);
   },
 
+  // 播放被瀏覽器的自動播放政策擋下是合法行為，不能當成錯誤；擋下就等下一次手勢再補播
+  _start() {
+    const p = this.el.play();
+    if (p && p.catch) p.catch(() => this._armUnlock());
+  },
+
+  // 一次性的手勢監聽：只掛一組，觸發後就拆掉。補播若又被擋，_start 會再掛一次。
+  _armUnlock() {
+    if (this._armed) return;
+    this._armed = true;
+    const go = () => {
+      this._armed = false;
+      removeEventListener('touchend', go);
+      removeEventListener('click', go);
+      removeEventListener('keydown', go);
+      if (!this.muted && this.current) this._start();
+    };
+    addEventListener('touchend', go);
+    addEventListener('click', go);
+    addEventListener('keydown', go);
+  },
+
   setVolume(v) {
     this.volume = Math.max(0, Math.min(1, v));
-    if (this.current) this.els[this.current].volume = this.volume;
+    if (this.el) this.el.volume = this.volume;
   },
 
   toggleMute() {
     this.muted = !this.muted;
+    if (!this.el) return this.muted;
     if (this.muted) {
-      if (this.current) this.els[this.current].pause();
+      this.el.pause();
     } else if (this.current) {
-      this.els[this.current].volume = this.volume;
-      this.els[this.current].play().catch(() => {});
+      this.el.volume = this.volume;
+      this._start();
     }
     return this.muted;
   },
