@@ -90,9 +90,11 @@ const Dbg = {
     const N = typeof Net  !== 'undefined' ? Net  : null;
     const U = typeof UI   !== 'undefined' ? UI   : null;
 
-    // 這台推出去的權威狀態
+    // 這台推出去的權威狀態。ver 要跟 pushNetState 裡的算法一致
+    // （取 _stateVer 與 _seenStateVer 的大者再加一），只看 _stateVer 會少算。
     this._wrap(G, 'pushNetState', () => this.log('push',
-      {cur: G.cur, st: G.state, mo: G.month, ver: G._stateVer + 1, tok: G.hasToken()}));
+      {cur: G.cur, st: G.state, mo: G.month, tok: G.hasToken(),
+       ver: Math.max(G._stateVer, G._seenStateVer) + 1}));
 
     // 收到別人的權威狀態——連「為什麼被丟掉」都要記，這正是這次同名重開 bug 的死因
     this._wrap(G, 'applyNetState', a => {
@@ -117,6 +119,20 @@ const Dbg = {
     // 月曆橫幅／年度決算——這兩條非同步分支是卡住的高風險區
     this._wrap(U, 'showMonthBanner', a => this.log('banner', {mo: a[0], st: G.state, tok: G.hasToken()}));
     this._wrap(U, 'showAnnualSettlement', () => this.log('annual', {st: G.state, tok: G.hasToken()}));
+
+    // 面板同步。listener 端的面板關不掉正是實測掛掉的原因（GOGOGO 那一局），
+    // 但 _syncOverlay 是每一幀都被呼叫的，只在「真的換了面板」時才記一筆。
+    this._wrap(G, '_syncOverlay', a => {
+      const ov = a[0];
+      const sig = ov ? [ov.m, (ov.d && ov.d.s) || '', (ov.d && ov.d.p) != null ? ov.d.p : ''].join('|') : null;
+      if (sig !== G._shownOverlaySig) this.log('overlay', {panel: ov ? ov.m : 'CLOSE'});
+    });
+    // driver 端最後送出去的那一幀帶著哪個面板——跟上面那筆對照就知道有沒有漏送關閉
+    this._wrap(G, 'pushNetLive', a => {
+      if (!a[0]) return;   // 只記強制送出的那幾幀（收尾），一般節流幀太多不記
+      const ov = (U && U.netOverlayNow && U.netOverlayNow()) || null;
+      this.log('liveEnd', {cur: G.cur, st: G.state, panel: ov ? ov.m : null});
+    });
 
     // token 的實際歸屬
     this._wrap(N, 'assignToken', a => this.log('assign', {to: a[0], turn: a[1], cur: a[2]}));
