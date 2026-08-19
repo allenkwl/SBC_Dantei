@@ -4,7 +4,7 @@
 //  所以額外掛了「使用者第一次點擊或按鍵」的解鎖邏輯，確保之後都能正常播放
 // ────────────────────────────────────────────────
 const BGM = {
-  KEYS: ['splash', 'setup', 'lobby', 'spring', 'summer', 'autumn', 'winter', 'debt', 'sea', 'plane'],
+  KEYS: ['splash', 'setup', 'lobby', 'character_select', 'spring', 'summer', 'autumn', 'winter', 'debt', 'sea', 'plane'],
   SEASON_KEY: {'春天': 'spring', '夏天': 'summer', '秋天': 'autumn', '冬天': 'winter'},
 
   els: {},
@@ -72,6 +72,7 @@ const SFX = {
   muted: false,
   KEYS: ['dice'],     // 走這裡播放的一次性音效（cheer／heli 有自己的 <audio> 元素，不在此列）
   els: {},
+  _priming: new Set(),   // 還在解鎖流程中的元素（見 init 的說明）
 
   // iOS 的規則是「每一個 Audio 元素」都必須先在使用者手勢裡播放過才會解鎖，不是「整個網頁」
   // 解鎖一次就好。舊版的 play() 每次都 new Audio()，等於每次都是一個全新、沒解鎖過的元素，
@@ -83,16 +84,22 @@ const SFX = {
       el.preload = 'auto';
       this.els[key] = el;
     });
-    // 用 volume=0 靜音再 play() 曾經在部分手機瀏覽器上失效：volume 的變更跟 play() 的
-    // 實際發聲之間有極短的競速空檔，播放起點偶爾會用舊的（非零）音量先出聲一瞬間，
-    // 短促的音效（例如骰子聲）聽起來就像「一開頁就有音效」。改用 muted 屬性靜音——
-    // 這是瀏覽器原生的硬靜音開關，在真正開始播放之前就已經生效，沒有這個競速問題。
+    // 解鎖流程「全程保持靜音」，不在這裡解除——這是手機上第一次觸控仍會聽到一聲骰子的
+    // 原因：之前是在 play() 的 .then() 裡 `pause(); muted = false`，但 iOS 上 pause()
+    // 不是立即生效的，元素在被解除靜音的那一瞬間還在出聲，短促的骰子音就這樣漏了出來。
+    // 改成解鎖只負責「靜音播一次讓元素通過 iOS 的每元素手勢限制」，真正要出聲時
+    // （SFX.play）才解除靜音，中間完全沒有「已解除靜音卻還在播」的空窗。
+    // _priming 記著哪些元素還在解鎖流程中：萬一解鎖的 .then() 比真正的播放晚回來，
+    // 也不會把玩家真正要聽的那一聲 pause 掉。
     const unlock = () => {
       Object.values(this.els).forEach(el => {
         el.muted = true;
+        this._priming.add(el);
         el.play().then(() => {
-          el.pause(); el.currentTime = 0; el.muted = false;
-        }).catch(() => { el.muted = false; });
+          if (!this._priming.has(el)) return;   // 已經被真正的播放接管，不要插手
+          el.pause(); el.currentTime = 0;
+          this._priming.delete(el);
+        }).catch(() => { this._priming.delete(el); });
       });
       removeEventListener('touchend', unlock);
       removeEventListener('click', unlock);
@@ -107,6 +114,8 @@ const SFX = {
     if (this.muted) return;
     const el = this.els[key];
     if (!el) return;
+    this._priming.delete(el);   // 從解鎖流程手上接管這個元素
+    el.muted = false;           // 真的要出聲了才解除靜音
     el.volume = this.volume;
     el.currentTime = 0;   // 重複使用同一個元素，要倒帶才能連續再播一次
     el.play().catch(() => {});   // 還沒解鎖或被 autoplay 政策擋下時，靜默失敗
