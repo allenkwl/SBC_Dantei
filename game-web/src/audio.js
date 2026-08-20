@@ -119,10 +119,12 @@ const BGM = {
 
   // 讓路：新聞快報之類的長音效響的時候把背景音樂壓低，結束後淡回原音量。
   // 不讓路的話兩邊會打在一起，兩邊都聽不清楚。單一個 <audio>，直接動 volume 就好。
+  // ms 給 null／不給 → 一直壓著，等 unduck() 才淡回（長度不固定的演出用，例如直升機飛行）
   duck(ms) {
     if (!this.el || this.muted) return;
     clearTimeout(this._duckT); clearInterval(this._duckI);
     this._applyVol(0.22);
+    if (ms == null) return;
     this._duckT = setTimeout(() => {
       const t0 = Date.now();
       this._duckI = setInterval(() => {
@@ -130,7 +132,19 @@ const BGM = {
         this._applyVol(0.22 + 0.78 * k);
         if (k >= 1) clearInterval(this._duckI);
       }, 40);
-    }, Math.max(0, (ms || 3000) - 400));
+    }, Math.max(0, ms - 400));
+  },
+
+  // 手動解除讓路（搭配 duck(null)）
+  unduck() {
+    if (!this.el) return;
+    clearTimeout(this._duckT); clearInterval(this._duckI);
+    const t0 = Date.now();
+    this._duckI = setInterval(() => {
+      const k = Math.min(1, (Date.now() - t0) / 700);
+      this._applyVol(0.22 + 0.78 * k);
+      if (k >= 1) clearInterval(this._duckI);
+    }, 40);
   },
 
   toggleMute() {
@@ -163,9 +177,12 @@ const BGM = {
 const SFX = {
   volume: 0.7,
   muted: false,
-  // 事後微調用（音量編輯器會寫進來）。音檔本身已經正規化過，所以預設都是 1.0。
-  // cheer 壓 0.93、heli 放大 1.71 已經直接做進 mp3 了，不需要在這裡補。
-  GAIN: {},
+  // 事後微調用（音量編輯器會寫進來）。音檔本身已經正規化過，所以預設都是 1.0，
+  // 除了 heli——那不是「修正檔案」而是混音決定：
+  // 直升機是持續好幾秒的引擎聲，即使量出來的 RMS 跟 dice 一樣，
+  // 聽起來還是比短促的擲骰聲小很多（持續音的響度感知本來就低）。
+  // 加上飛行期間背景音樂會讓路（見 showShortcutFlight 呼叫的 BGM.duck），兩件一起才夠清楚。
+  GAIN: {heli: 1.4},
   // 全部一次性音效都走這裡。cheer／heli 原本各自掛一個 <audio> 元素，
   // 而 iOS 的解鎖是「每一個元素」各自要在使用者手勢裡播過一次才算解鎖——
   // 到站慶祝與直升機都是動畫流程觸發的，永遠等不到屬於自己的手勢，
