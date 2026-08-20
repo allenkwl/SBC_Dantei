@@ -181,7 +181,8 @@ const SFX = {
   //   heli 1.4：持續音的響度感知比短促音效低（混音決定，不是修正檔案）
   //   news 0.30：程式合成的號角量出來是 -16.6 dB，比其他音效（約 -27 dB）大了 10.4 dB，
   //              不壓下來的話快報一響會蓋掉一切。這個數字是音量編輯器量出來的。
-  GAIN: {heli: 1.4, news: 0.30},
+  //   train 0.43：汽笛量出來 -19.6 dB，同理壓到跟 dice 齊平。
+  GAIN: {heli: 1.4, news: 0.30, train: 0.43},
   // 全部一次性音效都走這裡。cheer／heli 原本各自掛一個 <audio> 元素，
   // 而 iOS 的解鎖是「每一個元素」各自要在使用者手勢裡播過一次才算解鎖——
   // 到站慶祝與直升機都是動畫流程觸發的，永遠等不到屬於自己的手勢，
@@ -290,6 +291,57 @@ const SFX = {
     src.connect(gain); gain.connect(ctx.destination);
     src.start(0);
     return {stop() { try { src.stop(); } catch (_) {} try { gain.disconnect(); } catch (_) {} }};
+  },
+
+  // ── 火車汽笛「噗噗」（約 0.9 秒）──
+  // 輪到下一位玩家時響一聲，意思是「該出發了」。電腦的回合也一樣要響，
+  // 不然只有真人回合有聲音，節奏會忽有忽無。
+  //
+  // 蒸汽汽笛的音色特徵是「一組互相不協和的音疊在一起」＋「漏氣的噪音」，
+  // 單一個正弦波聽起來像電子嗶聲、不像火車。所以每一聲都用三個音疊
+  // （440／554／659，大三和弦再加一點失諧），外加一層帶通白噪當蒸氣聲。
+  // 噗噗＝兩短聲，第二聲尾巴讓音高稍微往下掉，聽起來才有「放鬆離站」的感覺。
+  //
+  // 跟號角一樣：放了 assets/audio/train.mp3 就會自動改用音檔（見下面第一行）。
+  trainWhistle() {
+    if (this.muted) return;
+    if (this.buffers.train) { this.play('train'); return; }
+    const c = this._ensureCtx();
+    if (!c) return;
+    this._resume(c);
+    const t = c.currentTime + 0.02;
+    const bus = c.createGain();
+    bus.gain.value = this.volume * (this.GAIN.train == null ? 1 : this.GAIN.train);
+    bus.connect(c.destination);
+
+    // 一聲汽笛：三個音＋蒸氣噪音，尾巴可選擇讓音高下滑
+    const toot = (t0, dur, bend) => {
+      [440, 554, 659].forEach((f, i) => {
+        const o = c.createOscillator(), gn = c.createGain(), lp = c.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 2600;
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(f, t0);
+        if (bend) o.frequency.exponentialRampToValueAtTime(f * 0.86, t0 + dur);
+        o.detune.value = (i - 1) * 7;
+        gn.gain.setValueAtTime(0, t0);
+        gn.gain.linearRampToValueAtTime(0.16, t0 + 0.03);      // 汽笛是慢一點的起音，不像打擊樂
+        gn.gain.setValueAtTime(0.16, t0 + dur * 0.6);
+        gn.gain.exponentialRampToValueAtTime(0.0008, t0 + dur);
+        o.connect(lp); lp.connect(gn); gn.connect(bus);
+        o.start(t0); o.stop(t0 + dur + 0.02);
+      });
+      // 蒸氣：帶通白噪，跟著汽笛一起收
+      const n = Math.max(1, Math.floor(c.sampleRate * dur));
+      const b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 1.2);
+      const src = c.createBufferSource(); src.buffer = b;
+      const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1700; bp.Q = 0.8;
+      const gn = c.createGain(); gn.gain.value = 0.10;
+      src.connect(bp); bp.connect(gn); gn.connect(bus);
+      src.start(t0);
+    };
+    toot(t, 0.26, false);          // 噗
+    toot(t + 0.34, 0.42, true);    // 噗～（尾巴下滑）
   },
 
   // ── 新聞快報的號角（約 4 秒）──
