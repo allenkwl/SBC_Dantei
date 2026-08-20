@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>音效診斷 v0.3</title>
+<style>
+  :root { --amber:#F0A020; --text:#D4E6F4; --lo:#5E84A4; --rim:#254663;
+          --ui: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:14px; background:#0a1420; color:var(--text); font-family:var(--ui); font-size:15px; }
+  h1 { font-size:17px; margin:0 0 4px; color:var(--amber); }
+  p.sub { color:var(--lo); font-size:13px; line-height:1.6; margin:0 0 12px; }
+  button { width:100%; padding:14px; margin:5px 0; font-size:16px; border-radius:10px;
+           background:linear-gradient(#355f77,#1b374b); color:#fff; border:2px solid #5fa1c2;
+           font-family:var(--ui); }
+  button.amber { border-color:var(--amber); }
+  #box { margin-top:12px; padding:12px; background:#0e1d2c; border:1px solid var(--rim);
+         border-radius:10px; font-family:Menlo,monospace; font-size:13px; line-height:1.85; white-space:pre-wrap; }
+  .k { color:var(--lo); }
+  .v { color:var(--amber); font-weight:700; }
+  .bad { color:#ff9a9a; font-weight:700; }
+  .ok { color:#4ade80; font-weight:700; }
+</style>
+</head>
+<body>
+<h1>🔧 音效診斷</h1>
+<p class="sub">
+  這一頁不是遊戲，只用來查「音量能不能被程式控制」。<br>
+  請照順序按，然後把最下面那塊<b>整段截圖</b>給我。手機請確定沒有靜音、音量鍵有調到聽得見。
+</p>
+
+<button class="amber" id="b1">① 播放背景音樂（春天）</button>
+<button id="b2">② 把音量降到 20%</button>
+<button id="b3">③ 音量回到 100%</button>
+<button id="b4">④ 播一次擲骰音效</button>
+<button id="b5">⑤ 播 4 秒號角（新聞快報的音效）</button>
+<button class="amber" id="b7">⑦ 檢查全部音檔能不能載入</button>
+<button id="b6">⑥ 停止全部</button>
+
+<div id="box">按下按鈕後這裡會更新⋯</div>
+
+<script>
+// 刻意完全獨立、不載入遊戲的 audio.js —— 要驗的是「瀏覽器本身」的行為
+const AUDIO = 'assets/audio/spring.mp3?v=2';
+const log = [];
+let el = null, ctx = null, srcNode = null, gainNode = null, dice = null;
+
+const $ = id => document.getElementById(id);
+function say(k, v, cls) { log.unshift(`<span class="k">${k}</span> <span class="${cls||'v'}">${v}</span>`); render(); }
+function render() {
+  const lines = [];
+  lines.push(`<span class="k">瀏覽器</span> <span class="v">${navigator.userAgent.slice(0,58)}</span>`);
+  // 這一行是關鍵：file:// 開啟的話 fetch 會被 CORS 擋掉，音效整組都會載不到
+  lines.push(`<span class="k">開啟方式</span> <span class="${location.protocol==='file:'?'bad':'ok'}">${location.protocol}//${location.host||'(本機檔案)'}</span>`
+           + (location.protocol==='file:' ? ' <span class="bad">← 本機檔案，fetch 會被擋</span>' : ''));
+  lines.push(`<span class="k">音檔位置</span> <span class="v">${new URL(AUDIO, location.href).href.slice(-46)}</span>`);
+  if (el) {
+    lines.push(`<span class="k">el.volume（要求）</span> <span class="v">${wanted.toFixed(2)}</span>`);
+    lines.push(`<span class="k">el.volume（實際）</span> <span class="${Math.abs(el.volume-wanted)<0.02?'ok':'bad'}">${el.volume.toFixed(2)}</span>`
+             + (Math.abs(el.volume-wanted)>=0.02 ? ' <span class="bad">← 被瀏覽器忽略</span>' : ''));
+    lines.push(`<span class="k">el.paused</span> <span class="v">${el.paused}</span>`);
+    lines.push(`<span class="k">el.muted</span> <span class="v">${el.muted}</span>`);
+  }
+  if (gainNode) lines.push(`<span class="k">Web Audio gain</span> <span class="v">${gainNode.gain.value.toFixed(2)}</span>`);
+  if (ctx) lines.push(`<span class="k">AudioContext</span> <span class="${ctx.state==='running'?'ok':'bad'}">${ctx.state}</span>`);
+  $('box').innerHTML = lines.concat(['', ...log.slice(0,10)]).join('\n');
+}
+let wanted = 1;
+
+function ensureCtx() {
+  if (!ctx) { const AC = window.AudioContext || window.webkitAudioContext; ctx = new AC(); }
+  if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
+  return ctx;
+}
+
+$('b1').onclick = () => {
+  if (!el) { el = new Audio(AUDIO); el.loop = true; }
+  wanted = 1; el.volume = 1;
+  el.play().then(() => say('① 播放', '成功', 'ok')).catch(e => say('① 播放', '被擋：' + e.name, 'bad'));
+  setTimeout(render, 300);
+};
+$('b2').onclick = () => {
+  if (!el) return say('② ', '請先按 ①', 'bad');
+  wanted = 0.2; el.volume = 0.2;
+  setTimeout(() => {
+    const ignored = Math.abs(el.volume - 0.2) >= 0.02;
+    say('② 降到 20%', ignored ? '❌ 瀏覽器忽略了（音量沒變小）' : '✅ 生效', ignored ? 'bad' : 'ok');
+  }, 250);
+};
+$('b3').onclick = () => {
+  if (!el) return say('③ ', '請先按 ①', 'bad');
+  wanted = 1; el.volume = 1; setTimeout(render, 250);
+  say('③ 回到 100%', '已設定');
+};
+$('b4').onclick = async () => {
+  const c = ensureCtx();
+  try {
+    if (!dice) {
+      const ab = await fetch('assets/audio/dice.mp3?v=2').then(r => r.arrayBuffer());
+      dice = await new Promise((res, rej) => { const r = c.decodeAudioData(ab, res, rej); if (r && r.then) r.then(res, rej); });
+    }
+    const s = c.createBufferSource(), g = c.createGain();
+    s.buffer = dice; g.gain.value = 0.8; s.connect(g); g.connect(c.destination); s.start(0);
+    say('④ 擲骰音效', '已送出（Web Audio）', 'ok');
+  } catch (e) { say('④ 擲骰音效', '失敗：' + e.message.slice(0,40), 'bad'); }
+  render();
+};
+$('b5').onclick = () => {
+  const c = ensureCtx();
+  const t = c.currentTime + 0.02;
+  const bus = c.createGain(); bus.gain.value = 0.7; bus.connect(c.destination);
+  const tone = (type, f, t0, dur, g) => {
+    const o = c.createOscillator(), gn = c.createGain();
+    o.type = type; o.frequency.value = f;
+    gn.gain.setValueAtTime(0, t0); gn.gain.linearRampToValueAtTime(g, t0 + .012);
+    gn.gain.exponentialRampToValueAtTime(.0008, t0 + dur);
+    o.connect(gn); gn.connect(bus); o.start(t0); o.stop(t0 + dur + .02);
+  };
+  [523,659,784,1047].forEach((f,i) => tone('triangle', f, t + i*.085, .20, .22));
+  [[784,.44,.20],[784,.66,.13],[1047,.82,.42]].forEach(([f,d,du]) => tone('sawtooth', f, t+d, du, .22));
+  [[880,1.38,.20],[880,1.60,.13],[1175,1.76,.46]].forEach(([f,d,du]) => tone('sawtooth', f, t+d, du, .22));
+  [523,659,784,1047].forEach((f,i) => tone('sawtooth', f, t+2.34, 2.10, .15));
+  tone('sine', 131, t+2.30, 1.2, .42);
+  say('⑤ 號角', '已送出（4 秒）', 'ok');
+  render();
+};
+// 逐一 fetch 每個音檔，把成功／失敗與 HTTP 狀態列出來——遊戲的 SFX 就是用 fetch 載入的
+const ALL = ['splash','setup','lobby','character_select','spring','summer','autumn','winter',
+             'debt','sea','plane','dice','cheer','heli'];
+$('b7').onclick = async () => {
+  say('開啟方式', location.protocol + '//' + (location.host || '(本機檔案)')
+      + (location.protocol === 'file:' ? '　← 本機檔案，fetch 一定全滅' : ''),
+      location.protocol === 'file:' ? 'bad' : 'ok');
+  say('⑦ 檢查', '開始⋯');
+  let ok = 0, bad = [];
+  for (const k of ALL) {
+    try {
+      const r = await fetch(`assets/audio/${k}.mp3?v=2`);
+      if (r.ok) { ok++; } else { bad.push(`${k}:HTTP ${r.status}`); }
+    } catch (e) { bad.push(`${k}:${(e && e.message || e).toString().slice(0,24)}`); }
+  }
+  say('⑦ 結果', `成功 ${ok}／${ALL.length}` + (bad.length ? '　失敗：' + bad.join('、') : '　全部可載入'),
+      bad.length ? 'bad' : 'ok');
+};
+$('b6').onclick = () => { if (el) el.pause(); say('⑥ 停止', '完成'); render(); };
+render();
+</script>
+</body>
+</html>
