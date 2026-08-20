@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新聞報導呈現模擬 v0.1</title>
+<style>
+  :root {
+    --navy: #0C1A28; --panel: #172B40cc; --rim: #254663;
+    --amber: #F0A020; --text: #D4E6F4; --lo: #5E84A4;
+    --ui: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:#0a1420; font-family:var(--ui); color:var(--text); }
+  body { display:flex; gap:18px; padding:18px; align-items:flex-start; }
+
+  /* ── 左邊：可調參數 ── */
+  #panel {
+    flex:0 0 260px; background:#132437; border:1px solid var(--rim); border-radius:12px;
+    padding:16px; font-size:13px; line-height:1.7;
+  }
+  #panel h1 { font-size:15px; margin:0 0 12px; color:var(--amber); }
+  #panel label { display:block; margin:12px 0 4px; color:var(--lo); font-size:12px; }
+  #panel button {
+    width:100%; margin:4px 0; padding:8px; border-radius:8px; cursor:pointer;
+    background:linear-gradient(#355f77,#1b374b); color:#fff; border:2px solid #5fa1c2;
+    font-family:var(--ui); font-size:13px;
+  }
+  #panel button.on { border-color:var(--amber); background:rgba(240,160,32,.22); }
+  #panel input[type=range] { width:100%; }
+  #panel .val { color:var(--amber); font-weight:700; }
+  #panel hr { border:0; border-top:1px solid var(--rim); margin:14px 0; }
+
+  /* ── 右邊：模擬的遊戲畫面 ── */
+  #stage-wrap { flex:1 1 auto; display:flex; justify-content:center; }
+  #stage {
+    position:relative; overflow:hidden; border-radius:14px; border:1px solid var(--rim);
+    background:#1d3a52 url('assets/map_bg.svg') center/cover no-repeat;
+    box-shadow:0 18px 50px rgba(0,0,0,.55);
+  }
+
+  /* 假的 HUD（左上）與底部按鈕，只為了看新聞卡會不會擋到 */
+  .fake-hud {
+    position:absolute; left:10px; top:10px; z-index:2; max-width:46%;
+    background:var(--panel); border:1px solid var(--rim); border-radius:10px;
+    padding:8px 10px; font-size:12px; line-height:1.6; backdrop-filter:blur(4px);
+  }
+  .fake-hud b { color:var(--amber); }
+  .fake-ctrl {
+    position:absolute; left:0; right:0; bottom:10px; z-index:2;
+    display:flex; gap:8px; justify-content:center;
+  }
+  .fake-ctrl div {
+    background:linear-gradient(#355f77,#1b374b); border:2px solid #5fa1c2; color:#fff;
+    border-radius:20px; padding:8px 16px; font-size:13px; font-weight:700;
+  }
+
+  /* ── 新聞快報卡 ── */
+  /* pointer-events:none 是刻意的：這是純演出，絕對不能吃掉點擊。
+     （今天才修過一個「畫面被蓋住、按鈕點不到」的 bug，同一個坑不要再踩） */
+  #news {
+    position:absolute; z-index:40; pointer-events:none;
+    right:2.5%; top:2.5%;
+    display:flex; flex-direction:column; gap:0;
+    opacity:0; transform:translateX(115%);
+  }
+  #news.play { animation:newsIn var(--dur) cubic-bezier(.22,.9,.32,1) forwards; }
+  @keyframes newsIn {
+    0%   { opacity:0; transform:translateX(115%); }
+    12%  { opacity:1; transform:translateX(0); }
+    82%  { opacity:1; transform:translateX(0); }
+    100% { opacity:0; transform:translateX(115%); }
+  }
+  #news img {
+    display:block; width:100%; height:auto; border-radius:10px 10px 0 0;
+    border:2px solid rgba(255,255,255,.75); border-bottom:none;
+    box-shadow:0 10px 30px rgba(0,0,0,.6);
+  }
+  #news .cap {
+    background:rgba(12,26,40,.94); border:2px solid rgba(255,255,255,.75); border-top:none;
+    border-radius:0 0 10px 10px; padding:10px 12px; text-align:center;
+    box-shadow:0 10px 30px rgba(0,0,0,.6);
+  }
+  #news .cap .line { color:#fff; font-weight:700; line-height:1.45; }
+  #news .cap .who { color:var(--amber); }
+  #news .cap .goal { color:#ffd36b; }
+  #news .cap .nb { white-space:nowrap; }
+  #news .cap .cheer { display:block; margin-top:3px; color:var(--text); font-weight:400; opacity:.85; }
+
+  #note { margin-top:12px; font-size:12px; color:var(--lo); line-height:1.7; }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h1>📺 新聞報導呈現模擬</h1>
+
+  <label>稱號</label>
+  <button data-t="0" class="on">夜市大亨（夜市）</button>
+  <button data-t="1">經營之神（公司）</button>
+  <button data-t="2">農業冠軍（農村）</button>
+
+  <hr>
+  <label>畫面尺寸</label>
+  <button data-s="390x844" class="on">手機直式 390×844</button>
+  <button data-s="844x390">手機橫式 844×390</button>
+  <button data-s="1280x800">電腦 1280×800</button>
+
+  <hr>
+  <label>卡片寬度 <span class="val" id="wv">62</span>% 畫面寬</label>
+  <input type="range" id="w" min="30" max="80" value="62">
+
+  <label>停留時間 <span class="val" id="dv">5.0</span> 秒</label>
+  <input type="range" id="d" min="30" max="90" value="50">
+
+  <hr>
+  <button id="replay" style="border-color:var(--amber)">▶ 重播</button>
+
+  <div id="note">
+    卡片是純演出，<b style="color:var(--text)">pointer-events:none</b>，不會吃掉點擊。<br>
+    插圖本身已經含標題與 LIVE 字樣，所以下方只放恭喜文字。
+  </div>
+</div>
+
+<div id="stage-wrap">
+  <div id="stage" style="width:390px;height:844px">
+    <div class="fake-hud">
+      第 1 年　3 月　<b>🎮 有控制權</b><br>
+      🚩 目的地：新左營（28）<br>
+      探險家　<b>💰 320萬</b>　🃏2/8
+    </div>
+
+    <div id="news">
+      <img id="news-img" src="../圖片/插圖/夜市大亨-修正版.png" alt="新聞報導">
+      <div class="cap">
+        <div class="line">
+          恭喜 <span class="who" id="who">探險家</span> 電鐵<br>
+          成為<span class="who nb" id="title">夜市大亨</span>！<br>
+          達成<span class="goal nb">年收入一百萬</span>目標
+          <span class="cheer">請繼續努力！</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="fake-ctrl"><div>🎲 擲骰</div><div>🃏 卡片</div></div>
+  </div>
+</div>
+
+<script>
+  const TITLES = [
+    {name: '夜市大亨', img: '夜市大亨-修正版.png'},
+    {name: '經營之神', img: '經營之神-修正版.png'},
+    {name: '農業冠軍', img: '農業冠軍-修正版.png'},
+  ];
+  const stage = document.getElementById('stage');
+  const news  = document.getElementById('news');
+  const wRange = document.getElementById('w'), dRange = document.getElementById('d');
+
+  function apply() {
+    const w = +wRange.value, d = +dRange.value / 10;
+    document.getElementById('wv').textContent = w;
+    document.getElementById('dv').textContent = d.toFixed(1);
+    // 尺寸不能只看寬度：插圖是 1:1 的正方形，再加上下面的字幕，橫式畫面上
+    // 「畫面寬的一半」會超出畫面高度，字幕直接掉到螢幕外面。所以同時用高度夾住。
+    const px = Math.min(stage.clientWidth * w / 100, stage.clientHeight * 0.62);
+    news.style.width = Math.round(px) + 'px';
+    news.style.setProperty('--dur', d + 's');
+    news.querySelector('.line').style.fontSize = Math.max(12, Math.round(px * 0.072)) + 'px';
+    news.querySelector('.cheer').style.fontSize = Math.max(11, Math.round(px * 0.060)) + 'px';
+  }
+  function replay() { news.classList.remove('play'); void news.offsetWidth; news.classList.add('play'); }
+
+  document.querySelectorAll('#panel button[data-t]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#panel button[data-t]').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    const t = TITLES[+b.dataset.t];
+    document.getElementById('news-img').src = '../圖片/插圖/' + t.img;
+    document.getElementById('title').textContent = t.name;
+    replay();
+  });
+  document.querySelectorAll('#panel button[data-s]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#panel button[data-s]').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    const [w, h] = b.dataset.s.split('x');
+    stage.style.width = w + 'px'; stage.style.height = h + 'px';
+    apply(); replay();
+  });
+  wRange.oninput = () => { apply(); };
+  dRange.oninput = () => { apply(); };
+  document.getElementById('replay').onclick = replay;
+
+  apply(); replay();
+  setInterval(replay, 9000);
+</script>
+</body>
+</html>

@@ -76,6 +76,22 @@ const BGM = {
     if (this.el) this.el.volume = this.volume;
   },
 
+  // 讓路：新聞快報之類的長音效響的時候把背景音樂壓低，結束後淡回原音量。
+  // 不讓路的話兩邊會打在一起，兩邊都聽不清楚。單一個 <audio>，直接動 volume 就好。
+  duck(ms) {
+    if (!this.el || this.muted) return;
+    clearTimeout(this._duckT); clearInterval(this._duckI);
+    this.el.volume = this.volume * 0.22;
+    this._duckT = setTimeout(() => {
+      const t0 = Date.now();
+      this._duckI = setInterval(() => {
+        const k = Math.min(1, (Date.now() - t0) / 900);
+        if (this.el) this.el.volume = this.volume * (0.22 + 0.78 * k);
+        if (k >= 1) clearInterval(this._duckI);
+      }, 40);
+    }, Math.max(0, (ms || 3000) - 400));
+  },
+
   toggleMute() {
     this.muted = !this.muted;
     if (!this.el) return this.muted;
@@ -162,6 +178,67 @@ const SFX = {
     gain.gain.value = this.volume;
     src.connect(gain); gain.connect(ctx.destination);
     src.start(0);   // 每次都是新的 source node，可以跟前一聲重疊
+  },
+
+  // ── 新聞快報的號角（約 4 秒）──
+  // 用 Web Audio 現場合成，不另外放 mp3。理由跟上面 SFX 改寫的理由是同一個：
+  // 每個 <audio> 元素在 iOS 都要自己在手勢裡播過才解鎖（cheer.mp3／heli.mp3 目前
+  // 在手機上很可能就是沒聲音的），而整個 AudioContext 只要 resume 一次就全部通行。
+  // 附帶好處是不用再多下載一個檔案，長度與音量隨時可調。
+  // 之後若準備了真正的 jingle，把 'news' 加進 KEYS ＋ 放 assets/audio/news.mp3，
+  // 下面的 newsSting() 會自動讓路（見開頭那個 buffers 判斷）。
+  //
+  // 結構：鑔片＋琶音衝上去 → 號角動機 → 升一階再來一次 → C 大和弦拉長收尾。
+  // 所有聲音先進一條總線再出去，不各自接 destination——四秒的樂句會同時疊七八個
+  // 聲音，各自接出去很容易加起來破音（實測峰值 0.50，沒有破音樣本）。
+  newsSting() {
+    if (this.muted) return;
+    if (this.buffers.news) { this.play('news'); return; }   // 有真的音檔就用音檔
+    const c = this._ensureCtx();
+    if (!c) return;
+    this._resume(c);
+    const t = c.currentTime + 0.02;
+    const bus = c.createGain();
+    bus.gain.value = this.volume;
+    bus.connect(c.destination);
+
+    const tone = ({type = 'sawtooth', f, t0, dur, g = .5, sweep = null, detune = 0}) => {
+      const o = c.createOscillator(), gn = c.createGain(), filt = c.createBiquadFilter();
+      filt.type = 'lowpass';
+      filt.frequency.setValueAtTime(sweep ? sweep[0] : 12000, t0);
+      if (sweep) filt.frequency.exponentialRampToValueAtTime(sweep[1], t0 + dur);
+      o.type = type; o.frequency.value = f; o.detune.value = detune;
+      gn.gain.setValueAtTime(0, t0);
+      gn.gain.linearRampToValueAtTime(g, t0 + .012);
+      gn.gain.exponentialRampToValueAtTime(.0008, t0 + dur);
+      o.connect(filt); filt.connect(gn); gn.connect(bus);
+      o.start(t0); o.stop(t0 + dur + .02);
+    };
+    const noise = ({t0, dur = .25, g = .25, hp = 4000}) => {
+      const n = Math.max(1, Math.floor(c.sampleRate * dur));
+      const buf = c.createBuffer(1, n, c.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 1.6);
+      const src = c.createBufferSource(); src.buffer = buf;
+      const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
+      const gn = c.createGain(); gn.gain.value = g;
+      src.connect(f); f.connect(gn); gn.connect(bus);
+      src.start(t0);
+    };
+    const chord = (freqs, t0, dur, g) =>
+      freqs.forEach((f, i) => tone({f, t0, dur, g, sweep: [2600, 700], detune: (i - 1) * 5}));
+
+    noise({t0: t, dur: .45, g: .15, hp: 3200});
+    tone({type: 'sine', f: 110, t0: t, dur: .9, g: .42});
+    [523, 659, 784, 1047].forEach((f, i) => tone({type: 'triangle', f, t0: t + i * .085, dur: .20, g: .22}));
+    [[784, .44, .20], [784, .66, .13], [1047, .82, .42]].forEach(([f, d, du]) =>
+      tone({f, t0: t + d, dur: du, g: .22, sweep: [3000, 900]}));
+    [[880, 1.38, .20], [880, 1.60, .13], [1175, 1.76, .46]].forEach(([f, d, du]) =>
+      tone({f, t0: t + d, dur: du, g: .22, sweep: [3200, 950]}));
+    noise({t0: t + 2.30, dur: .5, g: .13, hp: 3000});
+    tone({type: 'sine', f: 131, t0: t + 2.30, dur: 1.2, g: .42});
+    chord([523, 659, 784, 1047], t + 2.34, 2.10, .150);
+
+    BGM.duck(4000);   // 背景音樂讓路，不然季節配樂會跟號角打在一起
   },
 
   // 「按 A 才能繼續」的提示（到站慶祝、年度決算）沒有現成的音效檔，用 Web Audio 直接合成

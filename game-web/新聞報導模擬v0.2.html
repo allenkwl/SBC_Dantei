@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>新聞報導呈現模擬 v0.2</title>
+<style>
+  :root {
+    --navy: #0C1A28; --panel: #172B40cc; --rim: #254663;
+    --amber: #F0A020; --text: #D4E6F4; --lo: #5E84A4;
+    --ui: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:#0a1420; font-family:var(--ui); color:var(--text); }
+  body { display:flex; gap:18px; padding:18px; align-items:flex-start; }
+
+  /* ── 左邊：可調參數 ── */
+  #panel { flex:0 0 250px; background:#132437; border:1px solid var(--rim); border-radius:12px; padding:16px; font-size:13px; }
+  #panel h1 { font-size:15px; margin:0 0 10px; color:var(--amber); }
+  #panel label { display:block; margin:12px 0 4px; color:var(--lo); font-size:12px; }
+  #panel button {
+    width:100%; margin:3px 0; padding:7px; border-radius:8px; cursor:pointer;
+    background:linear-gradient(#355f77,#1b374b); color:#fff; border:2px solid #5fa1c2;
+    font-family:var(--ui); font-size:12.5px;
+  }
+  #panel button.on { border-color:var(--amber); background:rgba(240,160,32,.22); }
+  #panel input[type=range] { width:100%; }
+  #panel .val { color:var(--amber); font-weight:700; }
+  #panel hr { border:0; border-top:1px solid var(--rim); margin:13px 0; }
+  #note { margin-top:12px; font-size:11.5px; color:var(--lo); line-height:1.65; }
+  #note b { color:var(--text); }
+
+  /* ── 右邊：模擬的遊戲畫面 ── */
+  #stage-wrap { flex:1 1 auto; display:flex; justify-content:center; }
+  #stage {
+    position:relative; overflow:hidden; border-radius:14px; border:1px solid var(--rim);
+    background:#1d3a52 url('assets/map_bg.svg') center/cover no-repeat;
+    box-shadow:0 18px 50px rgba(0,0,0,.55);
+  }
+
+  /* ── 以下四塊都照遊戲本體的實際位置與尺寸複製，用來看新聞卡會不會擋到 ──
+     左上 #hud／右上那排圓鈕／左下 #controls／右下 #minimap。
+     窄螢幕（≤700px）的縮小規則也一起照抄。 */
+  .g-hud {
+    position:absolute; top:14px; left:14px; z-index:10; max-width:52%;
+    background:var(--panel); border:1px solid var(--rim); border-radius:10px;
+    padding:12px 14px; font-size:13px; line-height:1.65; backdrop-filter:blur(4px);
+  }
+  .g-hud b { color:var(--amber); }
+  .g-btns { position:absolute; top:14px; right:14px; z-index:70; display:flex; gap:4px; }
+  .g-btns span {
+    width:40px; height:40px; border-radius:50%; font-size:17px;
+    background:var(--panel); border:1px solid var(--rim);
+    display:flex; align-items:center; justify-content:center; backdrop-filter:blur(6px);
+  }
+  .g-ctrl { position:absolute; left:20px; bottom:20px; z-index:10; display:flex; gap:12px; }
+  .g-ctrl div {
+    background:linear-gradient(#355f77,#1b374b); border:2px solid #5fa1c2; color:#fff;
+    border-radius:22px; padding:0 20px; height:44px; display:flex; align-items:center;
+    font-size:13px; font-weight:700;
+  }
+  .g-mini {
+    position:absolute; right:14px; bottom:14px; z-index:10; width:150px; height:190px;
+    border:1px solid var(--rim); border-radius:8px; background:rgba(17,38,59,.8);
+    display:flex; align-items:center; justify-content:center; color:var(--lo); font-size:11px;
+  }
+  #stage.narrow .g-btns { top:8px; right:8px; gap:4px; }
+  #stage.narrow .g-btns span { width:32px; height:32px; font-size:14px; }
+  #stage.narrow .g-mini { right:8px; bottom:8px; width:120px; height:150px; }
+  #stage.narrow .g-hud { font-size:11.5px; padding:8px 10px; top:8px; left:8px; }
+  #stage.narrow .g-ctrl { left:8px; bottom:8px; }
+  #stage.narrow .g-ctrl div { height:40px; padding:0 16px; font-size:11px; }
+
+  /* ── 新聞快報卡 ──
+     pointer-events:none 是刻意的：純演出，絕對不能吃掉點擊。
+     （才剛修過一個「畫面被蓋住、按鈕點不到」的 bug，同一個坑不要再踩） */
+  #news { position:absolute; z-index:40; pointer-events:none; opacity:0; }
+  #news.play { animation:newsIn var(--dur) cubic-bezier(.22,.9,.32,1) forwards; }
+  @keyframes newsIn {
+    0%   { opacity:0; transform:translateX(115%); }
+    14%  { opacity:1; transform:translateX(0); }
+    80%  { opacity:1; transform:translateX(0); }
+    100% { opacity:0; transform:translateX(115%); }
+  }
+  #news img {
+    display:block; width:100%; height:auto; border-radius:10px 10px 0 0;
+    border:2px solid rgba(255,255,255,.75); border-bottom:none;
+  }
+  #news .cap {
+    background:rgba(12,26,40,.94); border:2px solid rgba(255,255,255,.75); border-top:none;
+    border-radius:0 0 10px 10px; padding:9px 12px; text-align:center;
+  }
+  #news .wrap { filter:drop-shadow(0 10px 30px rgba(0,0,0,.65)); }
+  /* 橫式版型：插圖是 1:1 的，直式（圖上字下）在橫螢幕上高度會吃掉八九成畫面、
+     還會壓到右下的小地圖。改成圖左字右之後，卡片高度只等於插圖高度。 */
+  #news.side .wrap { display:flex; align-items:stretch; }
+  #news.side img { width:auto; height:100%; flex:0 0 auto; border-radius:10px 0 0 10px; border-right:none; border-bottom:2px solid rgba(255,255,255,.75); }
+  #news.side .cap {
+    border-radius:0 10px 10px 0; border-top:2px solid rgba(255,255,255,.75); border-left:none;
+    display:flex; align-items:center; justify-content:center; padding:12px 16px;
+    flex:1 1 auto; min-width:0;
+  }
+  #news.side .wrap { height:100%; }
+  #news .line { color:#fff; font-weight:700; line-height:1.45; }
+  #news .who { color:var(--amber); }
+  #news .goal { color:#ffd36b; }
+  #news .nb { white-space:nowrap; }
+  #news .cheer { display:block; margin-top:2px; color:var(--text); font-weight:400; opacity:.85; }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h1>📺 新聞報導呈現模擬 v0.2</h1>
+
+  <label>稱號</label>
+  <button data-t="0" class="on">夜市大亨（夜市）</button>
+  <button data-t="1">經營之神（公司）</button>
+  <button data-t="2">農業冠軍（農村）</button>
+
+  <hr>
+  <label>擺放位置</label>
+  <button data-p="under" class="on">右上・讓開圓鈕（建議）</button>
+  <button data-p="corner">右上・貼齊（會蓋住圓鈕）</button>
+  <button data-p="mid">右側・垂直居中</button>
+
+  <hr>
+  <label>版型</label>
+  <button data-l="auto" class="on">自動（依畫面長寬）</button>
+  <button data-l="stack">直式・圖上字下</button>
+  <button data-l="side">橫式・圖左字右</button>
+
+  <hr>
+  <label>畫面尺寸</label>
+  <button data-s="390x844" class="on">手機直式 390×844</button>
+  <button data-s="844x390">手機橫式 844×390</button>
+  <button data-s="1280x800">電腦 1280×800</button>
+
+  <hr>
+  <label>卡片寬度 <span class="val" id="wv">62</span>% 畫面寬</label>
+  <input type="range" id="w" min="30" max="80" value="62">
+  <label>整段時間 <span class="val" id="dv">3.5</span> 秒</label>
+  <input type="range" id="d" min="20" max="80" value="35">
+
+  <hr>
+  <button id="replay" style="border-color:var(--amber)">▶ 重播</button>
+  <label style="margin-top:10px"><input type="checkbox" id="loop" checked style="width:auto"> 自動重播</label>
+
+  <div id="readout" style="margin-top:12px;padding:9px 10px;background:#0e1d2c;border:1px solid var(--rim);border-radius:8px;font-size:11.5px;line-height:1.7"></div>
+
+  <div id="note">
+    HUD／圓鈕／擲骰卡片／小地圖都照遊戲本體的<b>實際位置與尺寸</b>複製，
+    包含窄螢幕的縮小規則 —— 用來看會不會擋到。<br><br>
+    卡片是純演出，<b>pointer-events:none</b>，不吃點擊。<br>
+    插圖本身已含標題與 LIVE 字樣，下方只放恭喜文字。<br>
+    尺寸同時用高度夾住，橫式才不會讓字幕掉出畫面。
+  </div>
+</div>
+
+<div id="stage-wrap">
+  <div id="stage" class="narrow" style="width:390px;height:844px">
+    <div class="g-hud">
+      第 1 年　3 月　<b>🎮 有控制權</b><br>
+      🚩 目的地：新左營（28）<br>
+      探險家　<b>💰 320萬</b>　🃏2/8
+    </div>
+    <div class="g-btns"><span>👋</span><span>⚙️</span><span>❓</span><span>🔊</span></div>
+
+    <div id="news"><div class="wrap">
+      <img id="news-img" src="assets/news/夜市大亨.jpg" alt="新聞報導">
+      <div class="cap">
+        <div class="line">
+          恭喜 <span class="who">探險家</span> 電鐵<br>
+          成為<span class="who nb" id="title">夜市大亨</span>！<br>
+          達成<span class="goal nb">年收入一百萬</span>目標
+          <span class="cheer">請繼續努力！</span>
+        </div>
+      </div>
+    </div></div>
+
+    <div class="g-ctrl"><div>🎲 探險家 擲骰</div><div>🃏 卡片</div></div>
+    <div class="g-mini">小地圖</div>
+  </div>
+</div>
+
+<script>
+  const TITLES = [
+    {name: '夜市大亨', img: '夜市大亨.jpg'},
+    {name: '經營之神', img: '經營之神.jpg'},
+    {name: '農業冠軍', img: '農業冠軍.jpg'},
+  ];
+  const stage = document.getElementById('stage');
+  const news  = document.getElementById('news');
+  const wR = document.getElementById('w'), dR = document.getElementById('d');
+  let place = 'under', layout = 'auto', loopTimer = null;
+
+  function apply() {
+    const w = +wR.value, d = +dR.value / 10;
+    document.getElementById('wv').textContent = w;
+    document.getElementById('dv').textContent = d.toFixed(1);
+    const narrow = stage.clientWidth <= 700;
+    stage.classList.toggle('narrow', narrow);
+
+    // 圓鈕那排佔掉的高度（照遊戲的 top + 尺寸算），讓開就是從它下面開始
+    const btnBottom = narrow ? 8 + 32 : 14 + 40;
+    const edge = narrow ? 8 : 14;
+
+    // 版型：橫螢幕用圖左字右，卡片高度才不會吃掉八九成畫面
+    const side = layout === 'side' || (layout === 'auto' && stage.clientWidth / stage.clientHeight > 1.3);
+    news.classList.toggle('side', side);
+
+    // 高度不是「塞得進畫面」就好，還要避開右下的小地圖——上緣從圓鈕下面開始，
+    // 下緣不能碰到小地圖，中間那段才是真正可用的高度。
+    const miniH = (narrow ? 150 : 190) + edge + 8;
+    const top = place === 'under' ? btnBottom + 6 : edge;
+    const avail = stage.clientHeight - top - miniH;
+    // 兩種版型的長寬關係（插圖是 1:1）：
+    //   直式（圖上字下）：總高 ≈ 1.47 × 總寬
+    //   橫式（圖左字右）：總寬 ≈ 1.95 × 總高
+    // 兩邊都要同時被「可用高度」與「指定的畫面寬度比例」夾住，
+    // 只夾一邊就會出現 v0.1 那種字幕掉出畫面、或卡片橫向爆出去的情形。
+    const maxW = stage.clientWidth * w / 100;
+    let px;
+    if (side) {
+      // 橫式：先決定高度（受可用高度與「總寬不超過指定比例」兩邊夾），寬度再推回去
+      px = Math.min(avail, maxW / 1.95);
+      news.style.height = Math.round(px) + 'px';
+      news.style.width  = Math.round(px * 1.95) + 'px';
+    } else {
+      // 直式：先決定寬度（就是指定的比例），但總高 1.47×寬 不能超過可用高度
+      px = Math.min(maxW, avail / 1.47);
+      news.style.height = 'auto';
+      news.style.width  = Math.round(px) + 'px';
+    }
+    news.style.setProperty('--dur', d + 's');
+    news.style.right = edge + 'px';
+    if (place === 'corner')      { news.style.top = edge + 'px'; news.style.bottom = 'auto'; }
+    else if (place === 'under')  { news.style.top = (btnBottom + 6) + 'px'; news.style.bottom = 'auto'; }
+    else                         { news.style.top = '50%'; news.style.bottom = 'auto';
+                                   news.style.transform = 'translateY(-50%)'; }
+    if (place !== 'mid') news.style.transform = '';
+
+    news.querySelector('.line').style.fontSize  = Math.max(12, Math.round(px * 0.072)) + 'px';
+    news.querySelector('.cheer').style.fontSize = Math.max(11, Math.round(px * 0.060)) + 'px';
+    readout();   // 直接呼叫；getBoundingClientRect 本身就會強制算版面
+  }
+  function readout() {
+    const hit = (a,b) => !(a.right<b.left||a.left>b.right||a.bottom<b.top||a.top>b.bottom);
+    const r = news.getBoundingClientRect(), st = stage.getBoundingClientRect();
+    const q = s => document.querySelector(s).getBoundingClientRect();
+    const bad = [];
+    if (hit(r,q('.g-btns'))) bad.push('圓鈕');
+    if (hit(r,q('.g-hud')))  bad.push('HUD');
+    if (hit(r,q('.g-mini'))) bad.push('小地圖');
+    if (hit(r,q('.g-ctrl'))) bad.push('擲骰鈕');
+    if (r.bottom > st.bottom + 1) bad.push('超出畫面');
+    document.getElementById('readout').innerHTML =
+      `卡片 <b style="color:var(--amber)">${Math.round(r.width)}×${Math.round(r.height)}</b>　`
+      + `佔寬 ${Math.round(r.width/st.width*100)}%・佔高 ${Math.round(r.height/st.height*100)}%<br>`
+      + (bad.length ? `<span style="color:#ff9a9a">⚠ 蓋到：${bad.join('、')}</span>`
+                    : `<span style="color:#4ade80">✓ 沒有蓋到任何東西</span>`);
+  }
+  function replay() { news.classList.remove('play'); void news.offsetWidth; news.classList.add('play'); }
+  function pick(sel, cb) {
+    document.querySelectorAll(sel).forEach(b => b.onclick = () => {
+      document.querySelectorAll(sel).forEach(x => x.classList.remove('on'));
+      b.classList.add('on'); cb(b); apply(); replay();
+    });
+  }
+  pick('#panel button[data-t]', b => {
+    const t = TITLES[+b.dataset.t];
+    document.getElementById('news-img').src = 'assets/news/' + t.img;
+    document.getElementById('title').textContent = t.name;
+  });
+  pick('#panel button[data-p]', b => { place = b.dataset.p; });
+  pick('#panel button[data-l]', b => { layout = b.dataset.l; });
+  pick('#panel button[data-s]', b => {
+    const [w, h] = b.dataset.s.split('x');
+    stage.style.width = w + 'px'; stage.style.height = h + 'px';
+  });
+  wR.oninput = apply; dR.oninput = apply;
+  document.getElementById('replay').onclick = replay;
+  function relearn() {
+    clearInterval(loopTimer); loopTimer = null;
+    if (document.getElementById('loop').checked) loopTimer = setInterval(replay, +dR.value * 100 + 2500);
+  }
+  document.getElementById('loop').onchange = relearn;
+  dR.addEventListener('change', relearn);
+  apply(); replay(); relearn();
+</script>
+</body>
+</html>
