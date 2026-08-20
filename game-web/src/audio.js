@@ -1,3 +1,9 @@
+// 音檔的版本參數。v2.02 把所有 mp3 正規化了音量，但**檔名沒有變**——
+// 瀏覽器（尤其手機）會繼續用快取裡的舊檔案，聽到的還是舊音量。
+// 換過音檔就把這個數字加一，強制重新下載。
+const AUDIO_VER = 2;
+const audioURL = key => `assets/audio/${key}.mp3?v=${AUDIO_VER}`;
+
 // ────────────────────────────────────────────────
 //  audio.js — 背景音樂：開場／選人數／遊戲大廳／選角／遊戲中依季節切換
 // ────────────────────────────────────────────────
@@ -69,7 +75,7 @@ const BGM = {
     if (!this.el || this.current === key || this.KEYS.indexOf(key) < 0) return;
     this.current = key;
     // 換 src 本身就會停掉前一首並從頭開始，不用另外 pause() 與歸零 currentTime
-    this.el.src = `assets/audio/${key}.mp3`;
+    this.el.src = audioURL(key);
     this._applyVol(1);
     if (this.muted) { this.el.pause(); return; }
     this._start();
@@ -160,7 +166,12 @@ const SFX = {
   // 事後微調用（音量編輯器會寫進來）。音檔本身已經正規化過，所以預設都是 1.0。
   // cheer 壓 0.93、heli 放大 1.71 已經直接做進 mp3 了，不需要在這裡補。
   GAIN: {},
-  KEYS: ['dice'],     // 走這裡播放的一次性音效（cheer／heli 有自己的 <audio> 元素，不在此列）
+  // 全部一次性音效都走這裡。cheer／heli 原本各自掛一個 <audio> 元素，
+  // 而 iOS 的解鎖是「每一個元素」各自要在使用者手勢裡播過一次才算解鎖——
+  // 到站慶祝與直升機都是動畫流程觸發的，永遠等不到屬於自己的手勢，
+  // 所以那兩個音效在手機上其實一直是沒聲音的。搬進來之後共用同一個
+  // AudioContext，整個 context 解鎖一次就全部通行。
+  KEYS: ['dice', 'cheer', 'heli'],
   buffers: {},        // 解碼後的音訊，播放時直接取用，不再碰網路
   _ctx: null,
 
@@ -183,7 +194,7 @@ const SFX = {
     // 音檔抓下來解碼存著。decodeAudioData 在 context 還是 suspended 時一樣能執行，
     // 所以不用等使用者互動就能先準備好。
     this.KEYS.forEach(key => {
-      fetch(`assets/audio/${key}.mp3`)
+      fetch(audioURL(key))
         .then(res => res.arrayBuffer())
         .then(buf => new Promise((resolve, reject) => {
           // Safari 舊版只支援 callback 形式，新版回傳 Promise，兩種都接
@@ -216,6 +227,22 @@ const SFX = {
     gain.gain.value = this.volume * (this.GAIN[key] == null ? 1 : this.GAIN[key]);
     src.connect(gain); gain.connect(ctx.destination);
     src.start(0);   // 每次都是新的 source node，可以跟前一聲重疊
+  },
+
+  // 循環播放（直升機飛行中）。回傳一個可以停掉的把手；
+  // <audio loop> 換成 AudioBufferSourceNode 的 loop，行為一樣但走同一個解鎖路徑。
+  loop(key) {
+    if (this.muted) return null;
+    const ctx = this._ensureCtx();
+    const buf = this.buffers[key];
+    if (!ctx || !buf) return null;
+    this._resume(ctx);
+    const src = ctx.createBufferSource(), gain = ctx.createGain();
+    src.buffer = buf; src.loop = true;
+    gain.gain.value = this.volume * (this.GAIN[key] == null ? 1 : this.GAIN[key]);
+    src.connect(gain); gain.connect(ctx.destination);
+    src.start(0);
+    return {stop() { try { src.stop(); } catch (_) {} try { gain.disconnect(); } catch (_) {} }};
   },
 
   // ── 新聞快報的號角（約 4 秒）──
