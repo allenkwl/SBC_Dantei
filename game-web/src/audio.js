@@ -190,6 +190,8 @@ const SFX = {
   // AudioContext，整個 context 解鎖一次就全部通行。
   KEYS: ['dice', 'cheer', 'heli'],
   buffers: {},        // 解碼後的音訊，播放時直接取用，不再碰網路
+  fallbackFailed: {}, // 哪些 key 的 fetch 失敗了（退回 <audio>；診斷用）
+  _els: {},           // 退路用的 <audio> 元素
   _ctx: null,
 
   _ensureCtx() {
@@ -219,7 +221,13 @@ const SFX = {
           if (ret && ret.then) ret.then(resolve, reject);
         }))
         .then(decoded => { this.buffers[key] = decoded; })
-        .catch(() => {});   // 檔案缺了就是這個音效沒聲音，不影響遊戲進行
+        .catch(err => {
+          // fetch 失敗（離線、用 file:// 開啟會被 CORS 擋、檔案缺了…）就退回 <audio> 元素。
+          // 原本這裡是靜靜吞掉錯誤，結果變成「音效整個沒聲音，而且沒有任何跡象」——
+          // 實機診斷就是在這裡抓到 Failed to fetch 的。
+          // <audio> 在 iOS 有各自解鎖的問題，但「有機會有聲音」總比「一定沒聲音」好。
+          this.fallbackFailed[key] = String((err && err.message) || err).slice(0, 60);
+        });
     });
     const unlock = () => {
       this._resume(ctx);
@@ -232,11 +240,26 @@ const SFX = {
     addEventListener('keydown', unlock);
   },
 
+  // 退路：沒有解碼好的 buffer 時，用 <audio> 元素播。
+  _el(key) {
+    let el = this._els[key];
+    if (!el) { el = new Audio(audioURL(key)); el.preload = 'auto'; this._els[key] = el; }
+    return el;
+  },
+
   play(key) {
     if (this.muted) return;
     const ctx = this._ensureCtx();
     const buf = this.buffers[key];
-    if (!ctx || !buf) return;   // 還沒解碼完就這次不播，不卡住遊戲流程
+    if (!buf) {   // 還沒解碼完、或 fetch 失敗 → 用 <audio> 退路，不要無聲
+      const el = this._el(key);
+      el.loop = false;
+      el.volume = Math.max(0, Math.min(1, this.volume * (this.GAIN[key] == null ? 1 : this.GAIN[key])));
+      try { el.currentTime = 0; } catch (_) {}
+      el.play().catch(() => {});
+      return;
+    }
+    if (!ctx) return;
     this._resume(ctx);
     const src = ctx.createBufferSource();
     const gain = ctx.createGain();
@@ -252,7 +275,15 @@ const SFX = {
     if (this.muted) return null;
     const ctx = this._ensureCtx();
     const buf = this.buffers[key];
-    if (!ctx || !buf) return null;
+    if (!buf) {   // 退路：<audio loop>
+      const el = this._el(key);
+      el.loop = true;
+      el.volume = Math.max(0, Math.min(1, this.volume * (this.GAIN[key] == null ? 1 : this.GAIN[key])));
+      try { el.currentTime = 0; } catch (_) {}
+      el.play().catch(() => {});
+      return {stop() { el.pause(); try { el.currentTime = 0; } catch (_) {} }};
+    }
+    if (!ctx) return null;
     this._resume(ctx);
     const src = ctx.createBufferSource(), gain = ctx.createGain();
     src.buffer = buf; src.loop = true;
