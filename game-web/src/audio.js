@@ -117,32 +117,30 @@ const BGM = {
     this.el.volume = Math.max(0, Math.min(1, this.volume * this.trimOf(this.current) * factor));
   },
 
-  // 讓路：新聞快報之類的長音效響的時候把背景音樂壓低，結束後淡回原音量。
-  // 不讓路的話兩邊會打在一起，兩邊都聽不清楚。單一個 <audio>，直接動 volume 就好。
-  // ms 給 null／不給 → 一直壓著，等 unduck() 才淡回（長度不固定的演出用，例如直升機飛行）
+  // ── 讓路（ducking）──
+  // 任何音效播放時都把背景音樂壓低，結束後淡回。
+  //
+  // 用**引用計數**而不是單一計時器：音效會重疊（直升機循環中又擲骰、快報還沒播完就換人…），
+  // 單一計時器的話先結束的那個會把音樂放回來，另一個還在響。
+  // duck() 進場 +1、unduck()／逾時 -1，計數歸零才淡回。
+  _duckN: 0,
+  DUCK_DEPTH: 0.22,
+  // ms 給 null／不給 → 一直壓著，要自己呼叫 unduck()（長度不固定，例如直升機飛行）
   duck(ms) {
     if (!this.el || this.muted) return;
-    clearTimeout(this._duckT); clearInterval(this._duckI);
-    this._applyVol(0.22);
-    if (ms == null) return;
-    this._duckT = setTimeout(() => {
-      const t0 = Date.now();
-      this._duckI = setInterval(() => {
-        const k = Math.min(1, (Date.now() - t0) / 900);
-        this._applyVol(0.22 + 0.78 * k);
-        if (k >= 1) clearInterval(this._duckI);
-      }, 40);
-    }, Math.max(0, ms - 400));
+    this._duckN++;
+    clearInterval(this._duckI);
+    this._applyVol(this.DUCK_DEPTH);
+    if (ms != null) setTimeout(() => this.unduck(), Math.max(0, ms));
   },
-
-  // 手動解除讓路（搭配 duck(null)）
   unduck() {
-    if (!this.el) return;
-    clearTimeout(this._duckT); clearInterval(this._duckI);
+    this._duckN = Math.max(0, this._duckN - 1);
+    if (this._duckN > 0 || !this.el) return;   // 還有別的音效在響，繼續壓著
+    clearInterval(this._duckI);
     const t0 = Date.now();
     this._duckI = setInterval(() => {
       const k = Math.min(1, (Date.now() - t0) / 700);
-      this._applyVol(0.22 + 0.78 * k);
+      this._applyVol(this.DUCK_DEPTH + (1 - this.DUCK_DEPTH) * k);
       if (k >= 1) clearInterval(this._duckI);
     }, 40);
   },
@@ -251,6 +249,9 @@ const SFX = {
     if (this.muted) return;
     const ctx = this._ensureCtx();
     const buf = this.buffers[key];
+    // 讓路：所有音效播放時背景音樂都壓低。長度用音檔實際長度，抓不到就給 1 秒。
+    // 刻意放在最前面、不管音檔載到沒有——讓路是演出的一部分，不該依賴檔案載入成功。
+    BGM.duck(Math.round(((buf && buf.duration) || 1) * 1000) + 250);
     if (!buf) {   // 還沒解碼完、或 fetch 失敗 → 用 <audio> 退路，不要無聲
       const el = this._el(key);
       el.loop = false;
@@ -275,13 +276,15 @@ const SFX = {
     if (this.muted) return null;
     const ctx = this._ensureCtx();
     const buf = this.buffers[key];
+    // 循環音長度不固定，先一直壓著；把手的 stop() 負責解除（呼叫端不必自己記得）
+    BGM.duck(null);
     if (!buf) {   // 退路：<audio loop>
       const el = this._el(key);
       el.loop = true;
       el.volume = Math.max(0, Math.min(1, this.volume * (this.GAIN[key] == null ? 1 : this.GAIN[key])));
       try { el.currentTime = 0; } catch (_) {}
       el.play().catch(() => {});
-      return {stop() { el.pause(); try { el.currentTime = 0; } catch (_) {} }};
+      return {stop() { el.pause(); try { el.currentTime = 0; } catch (_) {} BGM.unduck(); }};
     }
     if (!ctx) return null;
     this._resume(ctx);
@@ -290,7 +293,7 @@ const SFX = {
     gain.gain.value = this.volume * (this.GAIN[key] == null ? 1 : this.GAIN[key]);
     src.connect(gain); gain.connect(ctx.destination);
     src.start(0);
-    return {stop() { try { src.stop(); } catch (_) {} try { gain.disconnect(); } catch (_) {} }};
+    return {stop() { try { src.stop(); } catch (_) {} try { gain.disconnect(); } catch (_) {} BGM.unduck(); }};
   },
 
   // ── 火車汽笛「噗噗」（約 0.9 秒）──
@@ -314,14 +317,14 @@ const SFX = {
     bus.gain.value = this.volume * (this.GAIN.train == null ? 1 : this.GAIN.train);
     bus.connect(c.destination);
 
-    // 一聲汽笛：三個音＋蒸氣噪音，尾巴可選擇讓音高下滑
-    const toot = (t0, dur, bend) => {
+    // 一聲汽笛：三個音＋蒸氣噪音。
+    // **音高固定不變**——真的汽笛拉長就只是拉長，不會降音（第一版做了尾音下滑是錯的）。
+    const toot = (t0, dur) => {
       [440, 554, 659].forEach((f, i) => {
         const o = c.createOscillator(), gn = c.createGain(), lp = c.createBiquadFilter();
         lp.type = 'lowpass'; lp.frequency.value = 2600;
         o.type = 'sawtooth';
-        o.frequency.setValueAtTime(f, t0);
-        if (bend) o.frequency.exponentialRampToValueAtTime(f * 0.86, t0 + dur);
+        o.frequency.value = f;
         o.detune.value = (i - 1) * 7;
         gn.gain.setValueAtTime(0, t0);
         gn.gain.linearRampToValueAtTime(0.16, t0 + 0.03);      // 汽笛是慢一點的起音，不像打擊樂
@@ -340,8 +343,9 @@ const SFX = {
       src.connect(bp); bp.connect(gn); gn.connect(bus);
       src.start(t0);
     };
-    toot(t, 0.26, false);          // 噗
-    toot(t + 0.34, 0.42, true);    // 噗～（尾巴下滑）
+    toot(t, 0.22);          // 噗（短）
+    toot(t + 0.32, 0.85);   // 噗——（長；同一個音高，只是拉長）
+    BGM.duck(1400);         // 汽笛全長約 1.17 秒，讓路留一點餘裕
   },
 
   // ── 新聞快報的號角（約 4 秒）──
@@ -412,6 +416,7 @@ const SFX = {
     const ctx = this._ensureCtx();
     if (!ctx) return;
     this._resume(ctx);
+    BGM.duck(600);
     try {
       const now = ctx.currentTime;
       [[880, 0], [1318.5, .09]].forEach(([freq, delay]) => {
