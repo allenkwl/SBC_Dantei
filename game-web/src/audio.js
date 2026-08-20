@@ -21,9 +21,22 @@ const BGM = {
   KEYS: ['splash', 'setup', 'lobby', 'character_select', 'spring', 'summer', 'autumn', 'winter', 'debt', 'sea', 'plane'],
   SEASON_KEY: {'春天': 'spring', '夏天': 'summer', '秋天': 'autumn', '冬天': 'winter'},
 
+  // ── 音量 ──
+  // 素材原本的母帶音量差非常多：實測（400ms 滑動窗 RMS 的第 95 百分位）最大聲的
+  // debt 比最小聲的 autumn 高 23.3 dB，大約五倍音量——負債配樂會炸耳朵、秋天幾乎聽不到。
+  //
+  // 修法是**直接把 mp3 正規化**（ffmpeg，原檔備份在 assets/audio/原始音量/），
+  // 全部拉到同一響度 0.055（約 -25 dB），調整後最大峰值 0.711，不會破音。
+  // 一度改成在程式裡用 Web Audio 增益補償（因為 el.volume 上限是 1.0、無法放大），
+  // 但那需要把 <audio> 接進 createMediaElementSource，元素的輸出會被永久改道——
+  // 接不好就是整個 BGM 靜音，風險不值得。檔案改對了，播放端就簡單。
+  //
+  // 下面的 TRIM／GAIN 留給「音量編輯器」做事後微調，只能衰減（≤1），
+  // 預設全部 1.0＝就用檔案本身的音量。
+  TRIM: {},
   el: null,
   current: null,
-  volume: 0.5,
+  volume: 0.8,     // 正規化之後整體變小，master 從 0.5 提到 0.8 才接近原本 lobby 的音量
   muted: false,
   _armed: false,
 
@@ -33,6 +46,23 @@ const BGM = {
     el.volume = this.volume;
     el.preload = 'auto';   // 還沒指定 src，真正的下載是 play() 時才開始
     this.el = el;
+    this.applySettings();
+  },
+
+  // 讀取音量編輯器存下來的設定（audio_settings.js）；沒有那個檔就用預設值
+  applySettings() {
+    const S = window.AUDIO_SETTINGS;
+    if (!S) return;
+    if (S.bgm) Object.keys(S.bgm).forEach(k => { this.TRIM[k] = S.bgm[k]; });
+    if (S.master && typeof S.master.bgm === 'number') this.volume = S.master.bgm;
+    if (S.sfx) Object.keys(S.sfx).forEach(k => { SFX.GAIN[k] = S.sfx[k]; });
+    if (S.master && typeof S.master.sfx === 'number') SFX.volume = S.master.sfx;
+    if (this.el) this._applyVol(1);
+  },
+
+  trimOf(key) {
+    const t = this.TRIM[key] == null ? 1 : this.TRIM[key];
+    return Math.max(0, Math.min(1, t));   // 只能衰減：el.volume 上限是 1.0
   },
 
   play(key) {
@@ -40,7 +70,7 @@ const BGM = {
     this.current = key;
     // 換 src 本身就會停掉前一首並從頭開始，不用另外 pause() 與歸零 currentTime
     this.el.src = `assets/audio/${key}.mp3`;
-    this.el.volume = this.volume;
+    this._applyVol(1);
     if (this.muted) { this.el.pause(); return; }
     this._start();
   },
@@ -73,7 +103,12 @@ const BGM = {
 
   setVolume(v) {
     this.volume = Math.max(0, Math.min(1, v));
-    if (this.el) this.el.volume = this.volume;
+    this._applyVol(1);
+  },
+  // factor 是暫時的衰減（讓路用），1 代表正常音量
+  _applyVol(factor) {
+    if (!this.el) return;
+    this.el.volume = Math.max(0, Math.min(1, this.volume * this.trimOf(this.current) * factor));
   },
 
   // 讓路：新聞快報之類的長音效響的時候把背景音樂壓低，結束後淡回原音量。
@@ -81,12 +116,12 @@ const BGM = {
   duck(ms) {
     if (!this.el || this.muted) return;
     clearTimeout(this._duckT); clearInterval(this._duckI);
-    this.el.volume = this.volume * 0.22;
+    this._applyVol(0.22);
     this._duckT = setTimeout(() => {
       const t0 = Date.now();
       this._duckI = setInterval(() => {
         const k = Math.min(1, (Date.now() - t0) / 900);
-        if (this.el) this.el.volume = this.volume * (0.22 + 0.78 * k);
+        this._applyVol(0.22 + 0.78 * k);
         if (k >= 1) clearInterval(this._duckI);
       }, 40);
     }, Math.max(0, (ms || 3000) - 400));
@@ -98,7 +133,7 @@ const BGM = {
     if (this.muted) {
       this.el.pause();
     } else if (this.current) {
-      this.el.volume = this.volume;
+      this._applyVol(1);
       this._start();
     }
     return this.muted;
@@ -122,6 +157,9 @@ const BGM = {
 const SFX = {
   volume: 0.7,
   muted: false,
+  // 事後微調用（音量編輯器會寫進來）。音檔本身已經正規化過，所以預設都是 1.0。
+  // cheer 壓 0.93、heli 放大 1.71 已經直接做進 mp3 了，不需要在這裡補。
+  GAIN: {},
   KEYS: ['dice'],     // 走這裡播放的一次性音效（cheer／heli 有自己的 <audio> 元素，不在此列）
   buffers: {},        // 解碼後的音訊，播放時直接取用，不再碰網路
   _ctx: null,
@@ -175,7 +213,7 @@ const SFX = {
     const src = ctx.createBufferSource();
     const gain = ctx.createGain();
     src.buffer = buf;
-    gain.gain.value = this.volume;
+    gain.gain.value = this.volume * (this.GAIN[key] == null ? 1 : this.GAIN[key]);
     src.connect(gain); gain.connect(ctx.destination);
     src.start(0);   // 每次都是新的 source node，可以跟前一聲重疊
   },
@@ -199,7 +237,7 @@ const SFX = {
     this._resume(c);
     const t = c.currentTime + 0.02;
     const bus = c.createGain();
-    bus.gain.value = this.volume;
+    bus.gain.value = this.volume * (this.GAIN.news == null ? 1 : this.GAIN.news);
     bus.connect(c.destination);
 
     const tone = ({type = 'sawtooth', f, t0, dur, g = .5, sweep = null, detune = 0}) => {
