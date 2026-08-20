@@ -180,7 +180,9 @@ const SFX = {
   //   news 0.30：程式合成的號角量出來是 -16.6 dB，比其他音效（約 -27 dB）大了 10.4 dB，
   //              不壓下來的話快報一響會蓋掉一切。這個數字是音量編輯器量出來的。
   //   train 0.43：汽笛量出來 -19.6 dB，同理壓到跟 dice 齊平。
-  GAIN: {heli: 1.4, news: 0.30, train: 0.43},
+  //   ship 0.16：遊輪汽笛是低頻長音，量出來 -11.1 dB（比 dice 大 16 dB），要壓很多。
+  //   plane_sfx 0.35：飛機起飛 -18.0 dB。
+  GAIN: {heli: 1.4, news: 0.30, train: 0.43, ship: 0.16, plane_sfx: 0.35},
   // 全部一次性音效都走這裡。cheer／heli 原本各自掛一個 <audio> 元素，
   // 而 iOS 的解鎖是「每一個元素」各自要在使用者手勢裡播過一次才算解鎖——
   // 到站慶祝與直升機都是動畫流程觸發的，永遠等不到屬於自己的手勢，
@@ -346,6 +348,78 @@ const SFX = {
     toot(t, 0.22);          // 噗（短）
     toot(t + 0.32, 0.85);   // 噗——（長；同一個音高，只是拉長）
     BGM.duck(1400);         // 汽笛全長約 1.17 秒，讓路留一點餘裕
+  },
+
+  // ── 遊輪汽笛（約 2 秒）──
+  // 玩家走到船運航線時響一次。船的汽笛特徵是**非常低、很長、帶點粗糙**——
+  // 頻率壓到 100Hz 上下，起音要慢（大型汽笛不會瞬間全開），並疊一個五度音讓它厚實。
+  // 放了 assets/audio/ship.mp3 會自動改用音檔。
+  shipHorn() {
+    if (this.muted) return;
+    if (this.buffers.ship) { this.play('ship'); return; }
+    const c = this._ensureCtx(); if (!c) return;
+    this._resume(c);
+    const t = c.currentTime + 0.02;
+    const bus = c.createGain();
+    bus.gain.value = this.volume * (this.GAIN.ship == null ? 1 : this.GAIN.ship);
+    bus.connect(c.destination);
+    const DUR = 1.9;
+    [98, 147, 196].forEach((f, i) => {          // 低音＋五度＋八度
+      const o = c.createOscillator(), gn = c.createGain(), lp = c.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 900;
+      o.type = i === 0 ? 'square' : 'sawtooth';  // 方波給低頻一點粗糙感
+      o.frequency.value = f; o.detune.value = (i - 1) * 6;
+      gn.gain.setValueAtTime(0, t);
+      gn.gain.linearRampToValueAtTime(i === 0 ? 0.30 : 0.13, t + 0.22);   // 慢起音
+      gn.gain.setValueAtTime(i === 0 ? 0.30 : 0.13, t + DUR * 0.72);
+      gn.gain.exponentialRampToValueAtTime(0.0008, t + DUR);
+      o.connect(lp); lp.connect(gn); gn.connect(bus);
+      o.start(t); o.stop(t + DUR + 0.02);
+    });
+    BGM.duck(Math.round(DUR * 1000) + 300);
+  },
+
+  // ── 飛機起飛（約 2.2 秒）──
+  // 玩家走到飛機航線時響一次。噴射引擎不是「某個音高」而是**寬頻噪音**，
+  // 所以主體用白噪＋帶通濾波，把濾波中心頻率一路往上掃（由遠而近、由低而高），
+  // 再墊一層低頻轟鳴。用振盪器做會像哨子，不像飛機。
+  planeTakeoff() {
+    if (this.muted) return;
+    if (this.buffers.plane_sfx) { this.play('plane_sfx'); return; }
+    const c = this._ensureCtx(); if (!c) return;
+    this._resume(c);
+    const t = c.currentTime + 0.02;
+    const bus = c.createGain();
+    bus.gain.value = this.volume * (this.GAIN.plane_sfx == null ? 1 : this.GAIN.plane_sfx);
+    bus.connect(c.destination);
+    const DUR = 2.2;
+    // 引擎噪音：帶通中心從 320Hz 掃到 3200Hz，音量同步推上去再收
+    const n = Math.floor(c.sampleRate * DUR);
+    const b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource(); src.buffer = b;
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q = 1.1;
+    bp.frequency.setValueAtTime(320, t);
+    bp.frequency.exponentialRampToValueAtTime(3200, t + DUR * 0.78);
+    bp.frequency.exponentialRampToValueAtTime(1400, t + DUR);
+    const gn = c.createGain();
+    gn.gain.setValueAtTime(0.02, t);
+    gn.gain.linearRampToValueAtTime(0.42, t + DUR * 0.62);
+    gn.gain.exponentialRampToValueAtTime(0.0008, t + DUR);
+    src.connect(bp); bp.connect(gn); gn.connect(bus);
+    src.start(t);
+    // 低頻轟鳴：跟著一起推起來
+    const o = c.createOscillator(), og = c.createGain(), olp = c.createBiquadFilter();
+    olp.type = 'lowpass'; olp.frequency.value = 260;
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(58, t);
+    o.frequency.linearRampToValueAtTime(96, t + DUR * 0.7);
+    og.gain.setValueAtTime(0.04, t);
+    og.gain.linearRampToValueAtTime(0.24, t + DUR * 0.6);
+    og.gain.exponentialRampToValueAtTime(0.0008, t + DUR);
+    o.connect(olp); olp.connect(og); og.connect(bus);
+    o.start(t); o.stop(t + DUR + 0.02);
+    BGM.duck(Math.round(DUR * 1000) + 300);
   },
 
   // ── 新聞快報的號角（約 4 秒）──
