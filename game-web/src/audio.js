@@ -45,14 +45,39 @@ const BGM = {
   volume: 0.8,     // 正規化之後整體變小，master 從 0.5 提到 0.8 才接近原本 lobby 的音量
   muted: false,
   _armed: false,
+  _gain: null, _srcNode: null,
 
   init() {
     const el = new Audio();
     el.loop = true;
-    el.volume = this.volume;
     el.preload = 'auto';   // 還沒指定 src，真正的下載是 play() 時才開始
     this.el = el;
+    this._connect();
     this.applySettings();
+    this._applyVol(1);
+  },
+
+  // 音量走 Web Audio 的增益節點，不用 el.volume。
+  //
+  // 為什麼一定要這樣：**iOS Safari 會忽略對 HTMLMediaElement.volume 的設定**
+  // （那是 iOS 的限制，音量只給實體按鍵控制）。只靠 el.volume 的話，
+  // 在 iPhone 上「總音量」與「快報／直升機時把音樂壓低」全部都不會生效——
+  // 使用者回報「手機 BGM 沒有讓路」就是這個。
+  //
+  // 註：v2.02 曾經接過一次又拿掉，當時的理由（量到訊號是 0）是錯的：
+  // 那是測試腳本先設了 el.volume 又被 play() 重設成 master(0) 蓋掉，
+  // 接線本身是通的。這次改成 el.volume 固定 1、音量完全由 gain 控制，
+  // 就不會再有兩個地方各自改音量的問題。
+  // 接不起來（沒有 Web Audio）就退回 el.volume，桌機照樣正常。
+  _connect() {
+    try {
+      const c = SFX._ensureCtx();
+      if (!c || !c.createMediaElementSource) return;
+      this._srcNode = c.createMediaElementSource(this.el);
+      this._gain = c.createGain();
+      this._srcNode.connect(this._gain);
+      this._gain.connect(c.destination);
+    } catch (_) { this._gain = null; this._srcNode = null; }
   },
 
   // 讀取音量編輯器存下來的設定（audio_settings.js）；沒有那個檔就用預設值
@@ -87,6 +112,9 @@ const BGM = {
 
   // 播放被瀏覽器的自動播放政策擋下是合法行為，不能當成錯誤；擋下就等下一次手勢再補播
   _start() {
+    // 接進 Web Audio 之後，context 是 suspended 就等於完全沒有聲音——
+    // 每次播放前確保它醒著（首次仍需使用者手勢，見 _armUnlock）。
+    if (this._gain) { try { SFX._resume(this._gain.context); } catch (_) {} }
     const p = this.el.play();
     if (p && p.catch) p.catch(() => this._armUnlock());
   },
@@ -100,6 +128,7 @@ const BGM = {
       removeEventListener('touchend', go);
       removeEventListener('click', go);
       removeEventListener('keydown', go);
+      if (this._gain) { try { SFX._resume(this._gain.context); } catch (_) {} }
       if (!this.muted && this.current) this._start();
     };
     addEventListener('touchend', go);
@@ -114,7 +143,19 @@ const BGM = {
   // factor 是暫時的衰減（讓路用），1 代表正常音量
   _applyVol(factor) {
     if (!this.el) return;
-    this.el.volume = Math.max(0, Math.min(1, this.volume * this.trimOf(this.current) * factor));
+    const v = Math.max(0, Math.min(1, this.volume * this.trimOf(this.current) * factor));
+    if (this._gain) {
+      this.el.volume = 1;                       // 交給 gain，不要兩個地方各自乘一次
+      const c = this._gain.context;
+      // setTargetAtTime 而不是直接指定：瞬間變動會有爆音
+      this._gain.gain.setTargetAtTime(v, c.currentTime, 0.02);
+    } else {
+      this.el.volume = v;
+    }
+  },
+  // 目前實際生效的音量（測試與除錯用；接了 gain 之後看 el.volume 會誤判）
+  effectiveVolume() {
+    return this._gain ? this._gain.gain.value : (this.el ? this.el.volume : 0);
   },
 
   // 讓路：新聞快報之類的長音效響的時候把背景音樂壓低，結束後淡回原音量。
