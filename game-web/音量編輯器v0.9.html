@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>音量編輯器 v0.9</title>
+<style>
+  :root {
+    --navy:#0C1A28; --panel:#172B40; --rim:#254663;
+    --amber:#F0A020; --text:#D4E6F4; --lo:#5E84A4;
+    --ui: system-ui, -apple-system, 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:18px; background:#0a1420; color:var(--text); font-family:var(--ui); font-size:13px; }
+  h1 { font-size:17px; margin:0 0 4px; color:var(--amber); }
+  .sub { color:var(--lo); font-size:12px; margin-bottom:14px; line-height:1.7; }
+  .sub b { color:var(--text); }
+
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+  button {
+    padding:8px 14px; border-radius:8px; cursor:pointer; font-family:var(--ui); font-size:12.5px;
+    background:linear-gradient(#355f77,#1b374b); color:#fff; border:2px solid #5fa1c2;
+  }
+  button.primary { border-color:var(--amber); }
+  button:disabled { opacity:.4; cursor:default; }
+
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:7px 8px; border-bottom:1px solid #1b3450; text-align:left; vertical-align:middle; }
+  th { color:var(--lo); font-size:11.5px; font-weight:400; white-space:nowrap; }
+  tr.group td { background:#102131; color:var(--amber); font-weight:700; border-bottom:1px solid var(--rim); }
+  td.name { white-space:nowrap; font-weight:700; }
+  td.scene { color:var(--lo); font-size:12px; }
+  td.num { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .ok { color:#4ade80; } .warn { color:#ffcf6b; } .bad { color:#ff9a9a; }
+  input[type=range] { width:130px; vertical-align:middle; }
+  .val { display:inline-block; min-width:38px; color:var(--amber); font-weight:700; font-variant-numeric:tabular-nums; }
+  .play { padding:4px 10px; font-size:12px; }
+
+  #master { display:flex; gap:26px; align-items:center; padding:10px 12px; margin-bottom:14px;
+            background:var(--panel); border:1px solid var(--rim); border-radius:10px; }
+  #out { width:100%; height:210px; margin-top:12px; background:#0e1d2c; color:var(--text);
+         border:1px solid var(--rim); border-radius:8px; padding:10px; font-family:Menlo,monospace;
+         font-size:11.5px; white-space:pre; overflow:auto; }
+</style>
+</head>
+<body>
+
+<h1>🔊 音量編輯器 v0.9</h1>
+<div class="sub">
+  按「量測全部」會把每個音檔解碼，算出<b>響度</b>（400ms 滑動窗 RMS 的第 95 百分位，比整首平均更接近「聽起來多大聲」）與<b>峰值</b>，
+  並算出把它拉到目標響度所需的<b>建議倍率</b>。<br>
+  這裡的滑桿是<b>播放端的事後微調</b>。BGM 走 <code>&lt;audio&gt;.volume</code>、上限 1.0 只能衰減；
+  音效走 Web Audio，可以放大到 200%。
+  音檔本身已經在 v2.02 用 ffmpeg 正規化過了，所以建議倍率理論上都應該接近 1.00 ——
+  <b>如果某一首偏離很多，代表那個檔案該重新正規化，而不是用滑桿硬壓。</b>
+</div>
+
+<div id="proto" style="margin-bottom:10px;font-size:12px"></div>
+
+<div id="master">
+  <div>總音量　BGM <input type="range" id="mb" min="0" max="100" value="80"><span class="val" id="mbv">0.80</span></div>
+  <div>音效 <input type="range" id="ms" min="0" max="100" value="70"><span class="val" id="msv">0.70</span></div>
+</div>
+
+<div class="bar">
+  <label style="margin:0 8px 0 0"><input type="checkbox" id="duckDemo" checked style="width:auto">
+    試聽音效時讓 BGM 避讓（跟遊戲一致）</label>
+</div>
+<div class="bar">
+  <button class="primary" id="measure">📊 量測全部</button>
+  <button id="stop">⏹ 停止播放</button>
+  <button id="revert">↺ 回到上次存檔</button>
+  <button id="reset">↺ 回到出廠預設</button>
+  <button class="primary" id="save">💾 存檔</button>
+  <button class="primary" id="deploy">🚀 存檔並部署上線</button>
+  <span id="status" style="color:var(--lo)"></span>
+</div>
+
+<div id="loaded" style="margin-bottom:10px;font-size:12.5px;color:var(--lo);line-height:1.7">讀取設定檔⋯</div>
+<table id="tbl"></table>
+<textarea id="out" readonly placeholder="按「存檔」之後，設定會直接寫進 game-web/audio_settings.js，內容同時顯示在這裡。按「存檔並部署上線」就連 GitHub 都一起推。"></textarea>
+
+<script>
+// ── 全部音檔與它們的使用場景 ──
+// 新增音檔就在這裡加一列，量測、試聽、存檔都會自動跟著跑。
+const TRACKS = [
+  {g:'BGM', k:'splash',           s:'開場主畫面'},
+  {g:'BGM', k:'setup',            s:'選人數／年數（單機序章後）'},
+  {g:'BGM', k:'lobby',            s:'連線大廳與等待室'},
+  {g:'BGM', k:'character_select', s:'選角色畫面'},
+  {g:'BGM', k:'spring',           s:'遊戲中・春天（4～6 月）'},
+  {g:'BGM', k:'summer',           s:'遊戲中・夏天（7～9 月）'},
+  {g:'BGM', k:'autumn',           s:'遊戲中・秋天（10～12 月）'},
+  {g:'BGM', k:'winter',           s:'遊戲中・冬天（1～3 月）'},
+  {g:'BGM', k:'debt',             s:'資金不足、強制變賣物產時'},
+  {g:'BGM', k:'sea',              s:'搭船移動中（船運航線）'},
+  {g:'BGM', k:'plane',            s:'搭飛機移動中（飛機航線）'},
+  {g:'音效', k:'dice',            s:'擲骰子'},
+  {g:'音效', k:'cheer',           s:'抵達目的地慶祝'},
+  {g:'音效', k:'heli',            s:'直升機捷徑（飛行中循環）'},
+  // 新聞號角沒有 mp3，是 audio.js 的 SFX.newsSting() 現場合成的。
+  // 一樣要出現在這裡：它的音量同樣受 SFX.GAIN.news 控制，也該跟其他音效對齊。
+  {g:'音效', k:'news', synth:true,  s:'新聞快報（達成稱號時，程式合成 4 秒）'},
+  {g:'音效', k:'train', synth:true, s:'換人時的火車汽笛「噗噗」（月曆橫幅後，程式合成 1.2 秒）'},
+  {g:'音效', k:'ship', synth:true,  s:'走到船運航線時的遊輪汽笛（程式合成 1.9 秒）'},
+  {g:'音效', k:'plane_sfx', synth:true, s:'走到飛機航線時的廣播三連音（程式合成 1.7 秒）'},
+];
+// 目標響度：BGM 與音效各自一組（兩者走不同的總音量，不必互相對齊）
+const TARGET = {BGM: 0.055, '音效': 0.0446};
+// 遊戲目前實際在用的預設值（audio.js 的 BGM.TRIM / SFX.GAIN）。
+// 這裡要跟 audio.js 保持一致 —— 不然滑桿從 1.00 開始，按下存檔就會把遊戲裡調好的值蓋掉。
+//   heli 1.4：持續音的響度感知比短促音效低，是混音決定不是修正檔案
+//   news 0.30：程式合成的號角量出來比其他音效大 10.4 dB，要壓下來
+const TRACK_KEYS = new Set(TRACKS.map(t => t.k));
+const DEFAULT_TRIM = {heli: 1.4, news: 0.30, train: 0.43, ship: 0.16, plane_sfx: 0.94};
+const DUCK_DEPTH = 0.22;   // 跟 audio.js 的 BGM.DUCK_DEPTH 一致
+// BGM 走 <audio>.volume（上限 1.0，只能衰減）；音效走 Web Audio，可以放大
+const MAXTRIM = {BGM: 1, '音效': 2};
+
+const $ = id => document.getElementById(id);
+let AC = null, cur = null;
+const ctx = () => (AC = AC || new (window.AudioContext || window.webkitAudioContext)());
+const trim = {};   // k -> 0..1
+
+function build() {
+  const rows = ['<tr><th>音檔</th><th>使用場景</th><th>響度</th><th>峰值</th><th>建議倍率</th><th>播放端微調</th><th></th></tr>'];
+  let g = null;
+  TRACKS.forEach(t => {
+    if (t.g !== g) { g = t.g; rows.push(`<tr class="group"><td colspan="7">${g}</td></tr>`); }
+    trim[t.k] = trim[t.k] == null ? (DEFAULT_TRIM[t.k] == null ? 1 : DEFAULT_TRIM[t.k]) : trim[t.k];
+    rows.push(`<tr data-k="${t.k}">
+      <td class="name">${t.k}${t.synth ? '<br><span style="font-weight:400;color:var(--lo);font-size:11px">程式合成</span>' : ''}</td>
+      <td class="scene">${t.s}</td>
+      <td class="num" id="ld-${t.k}">—</td>
+      <td class="num" id="pk-${t.k}">—</td>
+      <td class="num" id="sg-${t.k}">—</td>
+      <td class="num"><input type="range" min="0" max="${MAXTRIM[t.g]*100}" value="${Math.round(trim[t.k]*100)}"
+           oninput="setTrim('${t.k}', this.value)"><span class="val" id="tv-${t.k}">${trim[t.k].toFixed(2)}</span></td>
+      <td><button class="play" onclick="preview('${t.k}')">▶ 試聽</button></td>
+    </tr>`);
+  });
+  $('tbl').innerHTML = rows.join('');
+}
+function setTrim(k, v) { trim[k] = v / 100; $('tv-' + k).textContent = trim[k].toFixed(2); }
+
+// 量測：解碼 → 響度（400ms 窗 RMS 的 p95）＋ 峰值 → 建議倍率
+async function measure() {
+  $('measure').disabled = true;
+  const c = ctx();
+  for (const t of TRACKS) {
+    $('status').textContent = `量測 ${t.k}⋯`;
+    try {
+      // 程式合成的沒有檔案可抓，改用 OfflineAudioContext 跑一次再量同樣的指標
+      const a = t.synth ? await renderSynth(t.k)
+        : await (async () => {
+            const ab = await fetch(`assets/audio/${t.k}.mp3?x=${Date.now()}`).then(r => r.arrayBuffer());
+            return new Promise((res, rej) => { const r = c.decodeAudioData(ab, res, rej); if (r && r.then) r.then(res, rej); });
+          })();
+      const n = a.length, ch = a.numberOfChannels, d = new Float32Array(n);
+      for (let k = 0; k < ch; k++) { const s = a.getChannelData(k); for (let i = 0; i < n; i++) d[i] += s[i] / ch; }
+      let pk = 0; for (let i = 0; i < n; i++) { const v = Math.abs(d[i]); if (v > pk) pk = v; }
+      const win = Math.floor(a.sampleRate * 0.4), hop = Math.floor(win / 2), rs = [];
+      for (let s2 = 0; s2 + win <= n; s2 += hop) { let e = 0; for (let i = s2; i < s2 + win; i++) e += d[i] * d[i]; rs.push(Math.sqrt(e / win)); }
+      rs.sort((x, y) => x - y);
+      const p95 = rs[Math.floor(rs.length * 0.95)] || 0;
+      const sug = TARGET[t.g] / (p95 || 1e-9);
+      const dB = 20 * Math.log10(p95 || 1e-9);
+      $('ld-' + t.k).innerHTML = `${p95.toFixed(4)}<br><span style="color:var(--lo)">${dB.toFixed(1)} dB</span>`;
+      $('pk-' + t.k).innerHTML = pk >= 0.99 ? `<span class="bad">${pk.toFixed(3)} 破音</span>`
+                               : pk >= 0.9  ? `<span class="warn">${pk.toFixed(3)}</span>`
+                               :              `${pk.toFixed(3)}`;
+      // 顏色要比的是「補償之後齊不齊」，不是「原始素材齊不齊」。
+      // 程式合成的音效（號角、汽笛）本身就比其他音效大，但已經用 GAIN 壓下來了；
+      // 只看原始響度會一直標紅，變成沒有意義的警告。
+      // 所以拿「建議倍率」跟「目前的微調值」比：已經補好就是綠的。
+      const off = Math.abs(20 * Math.log10(sug / (trim[t.k] || 1e-6)));
+      const cls = off <= 1.5 ? 'ok' : off <= 4 ? 'warn' : 'bad';
+      const hint = off <= 1.5 ? '' : `<br><span style="font-size:11px;color:var(--lo)">目前 ${trim[t.k].toFixed(2)}</span>`;
+      $('sg-' + t.k).innerHTML = `<span class="${cls}">×${sug.toFixed(2)}</span>${hint}`;
+    } catch (e) {
+      const local = location.protocol === 'file:';
+      $('sg-' + t.k).innerHTML = `<span class="bad">${local ? '本機檔案無法量測' : '讀取失敗'}</span>`;
+    }
+  }
+  $('status').textContent = '量測完成。綠色＝加上微調之後已經齊平；橘／紅＝還沒補到（把微調拉到建議倍率，或重新正規化那個檔案）。';
+  $('measure').disabled = false;
+}
+
+// ── 新聞號角：跟 audio.js 的 SFX.newsSting() 同一段樂句 ──
+// 這裡刻意重寫一份而不是去呼叫遊戲的 audio.js：編輯器要能單獨開著用，
+// 不該為了試聽就把整套遊戲程式載進來。改了樂句要記得兩邊一起改。
+function buildSting(c, out, t) {
+  const tone = ({type='sawtooth', f, t0, dur, g=.5, sweep=null, detune=0}) => {
+    const o=c.createOscillator(), gn=c.createGain(), fl=c.createBiquadFilter();
+    fl.type='lowpass'; fl.frequency.setValueAtTime(sweep?sweep[0]:12000, t0);
+    if (sweep) fl.frequency.exponentialRampToValueAtTime(sweep[1], t0+dur);
+    o.type=type; o.frequency.value=f; o.detune.value=detune;
+    gn.gain.setValueAtTime(0,t0); gn.gain.linearRampToValueAtTime(g,t0+.012);
+    gn.gain.exponentialRampToValueAtTime(.0008,t0+dur);
+    o.connect(fl); fl.connect(gn); gn.connect(out); o.start(t0); o.stop(t0+dur+.02);
+  };
+  const noise = ({t0, dur=.25, g=.25, hp=4000}) => {
+    const n=Math.max(1,Math.floor(c.sampleRate*dur));
+    const b=c.createBuffer(1,n,c.sampleRate), d=b.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/n,1.6);
+    const src=c.createBufferSource(); src.buffer=b;
+    const f=c.createBiquadFilter(); f.type='highpass'; f.frequency.value=hp;
+    const gn=c.createGain(); gn.gain.value=g;
+    src.connect(f); f.connect(gn); gn.connect(out); src.start(t0);
+  };
+  const chord=(fs,t0,dur,g)=>fs.forEach((f,i)=>tone({f,t0,dur,g,sweep:[2600,700],detune:(i-1)*5}));
+  noise({t0:t, dur:.45, g:.15, hp:3200});
+  tone({type:'sine', f:110, t0:t, dur:.9, g:.42});
+  [523,659,784,1047].forEach((f,i)=>tone({type:'triangle',f,t0:t+i*.085,dur:.20,g:.22}));
+  [[784,.44,.20],[784,.66,.13],[1047,.82,.42]].forEach(([f,d,du])=>tone({f,t0:t+d,dur:du,g:.22,sweep:[3000,900]}));
+  [[880,1.38,.20],[880,1.60,.13],[1175,1.76,.46]].forEach(([f,d,du])=>tone({f,t0:t+d,dur:du,g:.22,sweep:[3200,950]}));
+  noise({t0:t+2.30, dur:.5, g:.13, hp:3000});
+  tone({type:'sine', f:131, t0:t+2.30, dur:1.2, g:.42});
+  chord([523,659,784,1047], t+2.34, 2.10, .150);
+}
+// 火車汽笛「噗噗」——跟 audio.js 的 SFX.trainWhistle() 同一段（改了要兩邊一起改）
+function buildWhistle(c, out, t) {
+  const toot = (t0, dur) => {
+    [440, 554, 659].forEach((f, i) => {
+      const o=c.createOscillator(), gn=c.createGain(), lp=c.createBiquadFilter();
+      lp.type='lowpass'; lp.frequency.value=2600;
+      o.type='sawtooth'; o.frequency.value = f;   // 音高固定，拉長不降音
+      o.detune.value=(i-1)*7;
+      gn.gain.setValueAtTime(0,t0); gn.gain.linearRampToValueAtTime(0.16,t0+0.03);
+      gn.gain.setValueAtTime(0.16, t0+dur*0.6);
+      gn.gain.exponentialRampToValueAtTime(0.0008,t0+dur);
+      o.connect(lp); lp.connect(gn); gn.connect(out); o.start(t0); o.stop(t0+dur+0.02);
+    });
+    const n=Math.max(1,Math.floor(c.sampleRate*dur));
+    const b=c.createBuffer(1,n,c.sampleRate), d=b.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/n,1.2);
+    const src=c.createBufferSource(); src.buffer=b;
+    const bp=c.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=1700; bp.Q=0.8;
+    const gn=c.createGain(); gn.gain.value=0.10;
+    src.connect(bp); bp.connect(gn); gn.connect(out); src.start(t0);
+  };
+  toot(t, 0.22);          // 噗（短）
+  toot(t + 0.32, 0.85);   // 噗——（長）
+}
+// 遊輪汽笛：低頻長音＋五度八度疊音，慢起音（跟 audio.js 的 SFX.shipHorn 同步）
+function buildShip(c, out, t) {
+  const DUR = 1.9;
+  [98,147,196].forEach((f,i)=>{
+    const o=c.createOscillator(), gn=c.createGain(), lp=c.createBiquadFilter();
+    lp.type='lowpass'; lp.frequency.value=900;
+    o.type = i===0 ? 'square' : 'sawtooth';
+    o.frequency.value=f; o.detune.value=(i-1)*6;
+    gn.gain.setValueAtTime(0,t);
+    gn.gain.linearRampToValueAtTime(i===0?0.30:0.13, t+0.22);
+    gn.gain.setValueAtTime(i===0?0.30:0.13, t+DUR*0.72);
+    gn.gain.exponentialRampToValueAtTime(0.0008, t+DUR);
+    o.connect(lp); lp.connect(gn); gn.connect(out); o.start(t); o.stop(t+DUR+0.02);
+  });
+}
+// 飛機廣播三連音：帶通白噪往上掃＋低頻轟鳴（跟 audio.js 的 SFX.planeTakeoff 同步）
+function buildPlane(c, out, t) {
+  // 廣播前的三連音（百貨公司／全聯那種）：C5-E5-G5 上行，鐘琴音色 = 基音＋二倍＋三倍泛音
+  const bell = (f, t0, dur, g) => {
+    [[1,1],[2,0.32],[3,0.14]].forEach(([m,a]) => {
+      const o=c.createOscillator(), gn=c.createGain();
+      o.type='sine'; o.frequency.value=f*m;
+      gn.gain.setValueAtTime(0,t0);
+      gn.gain.linearRampToValueAtTime(g*a, t0+0.008);
+      gn.gain.exponentialRampToValueAtTime(0.0006, t0+dur);
+      o.connect(gn); gn.connect(out); o.start(t0); o.stop(t0+dur+0.02);
+    });
+  };
+  bell(523.25, t,        1.15, 0.26);   // C5
+  bell(659.25, t + 0.30, 1.25, 0.26);   // E5
+  bell(783.99, t + 0.60, 1.80, 0.30);   // G5
+}
+const SYNTH = {news: buildSting, train: buildWhistle, ship: buildShip, plane_sfx: buildPlane};
+async function renderSynth(k) {
+  const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const oc = new OC(1, 44100 * 6, 44100);
+  const bus = oc.createGain(); bus.gain.value = 1; bus.connect(oc.destination);
+  SYNTH[k](oc, bus, 0.02);
+  return oc.startRendering();
+}
+
+// 試聽：套用「總音量 × 這一軌的微調」，聽到的就是遊戲裡實際會聽到的音量
+// 背景音樂用另一個元素持續播，這樣試聽音效時才聽得到「讓路」的效果
+let bgmEl = null;
+function bgmPlay(k) {
+  if (!bgmEl) { bgmEl = new Audio(); bgmEl.loop = true; }
+  bgmEl.src = `assets/audio/${k}.mp3`;
+  bgmEl.volume = (+$('mb').value / 100) * (trim[k] == null ? 1 : trim[k]);
+  bgmEl.play().catch(() => {});
+  bgmBase = bgmEl.volume;
+}
+let bgmBase = 0, duckN = 0, duckTimer = null;
+// 引用計數，跟 audio.js 的 BGM.duck/unduck 同一套邏輯
+function duckFor(ms) {
+  if (!$('duckDemo').checked || !bgmEl || bgmEl.paused) return;
+  duckN++;
+  clearInterval(duckTimer);
+  bgmEl.volume = bgmBase * DUCK_DEPTH;
+  setTimeout(() => {
+    duckN = Math.max(0, duckN - 1);
+    if (duckN > 0) return;
+    const t0 = Date.now();
+    duckTimer = setInterval(() => {
+      const kk = Math.min(1, (Date.now() - t0) / 700);
+      bgmEl.volume = bgmBase * (DUCK_DEPTH + (1 - DUCK_DEPTH) * kk);
+      if (kk >= 1) clearInterval(duckTimer);
+    }, 40);
+  }, ms);
+}
+
+function preview(k) {
+  const t0 = TRACKS.find(x => x.k === k);
+  if (t0 && t0.g === 'BGM') { bgmPlay(k); $('status').textContent = `播放 BGM ${k}`; return; }
+  const t = TRACKS.find(x => x.k === k);
+  const master = (t.g === 'BGM' ? +$('mb').value : +$('ms').value) / 100;
+  if (t.synth) {
+    const c = ctx(); if (c.state === 'suspended') c.resume();
+    const bus = c.createGain(); bus.gain.value = master * trim[k]; bus.connect(c.destination);
+    SYNTH[k](c, bus, c.currentTime + 0.02);
+    duckFor({news: 4000, train: 1400, ship: 2200, plane_sfx: 2400}[k] || 1400);
+    $('status').textContent = `試聽 ${k}（總音量 ${master.toFixed(2)} × 微調 ${trim[k].toFixed(2)}）`;
+    return;
+  }
+  const el = new Audio(`assets/audio/${k}.mp3`);
+  el.volume = Math.max(0, Math.min(1, master * trim[k]));
+  el.play().catch(() => {});
+  el.addEventListener('loadedmetadata', () => duckFor(Math.round(el.duration * 1000) + 250), {once: true});
+  cur = el;
+  $('status').textContent = `試聽 ${k}（總音量 ${master.toFixed(2)} × 微調 ${trim[k].toFixed(2)} = ${el.volume.toFixed(3)}）`;
+}
+function stop() { if (cur) { cur.pause(); cur = null; } }
+$('b_stopbgm') && 0;
+
+function save() {
+  const bgm = {}, sfx = {};
+  TRACKS.forEach(t => { (t.g === 'BGM' ? bgm : sfx)[t.k] = +trim[t.k].toFixed(2); });
+  const obj = {master: {bgm: +( +$('mb').value / 100 ).toFixed(2), sfx: +( +$('ms').value / 100 ).toFixed(2)}, bgm, sfx};
+  $('out').value =
+    '// 由「音量編輯器」存檔產生，遊戲讀這一份（見 audio.js 的 applySettings）。\n'
+  + '// 請不要手動編輯這個檔案——改用編輯器調整後按「存檔」。\n'
+  + '// bgm／sfx 是每一軌的「播放端微調」，只能衰減（0～1）；\n'
+  + '// 要放大請直接正規化 mp3（原檔備份在 assets/audio/原始音量/）。\n'
+  + 'window.AUDIO_SETTINGS = ' + JSON.stringify(obj, null, 2) + ';\n';
+  $('out').select();
+  return $('out').value;
+}
+
+// 存檔：先問本機工具伺服器（scripts/tool_server.js），它會直接寫進
+// game-web/audio_settings.js。伺服器沒開、或這一頁是從 GitHub Pages 開的，
+// 就退回下載到「下載」資料夾——以前只填在框框裡，太容易忘記貼上，
+// 結果部署說「沒有任何變更」，白忙一場。
+async function saveToDisk() {
+  const text = save();
+  try {
+    const r = await fetch('/api/save-audio', {method: 'POST', body: text});
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.msg);
+    $('status').innerHTML = '✅ ' + j.msg + (j.sfx ? '　<span style="color:var(--lo)">' + j.sfx + '</span>' : '');
+    SAVED = parseSettings(text);        // 存檔成功後，「上次存檔」就是這一份
+    return true;
+  } catch (e) {
+    const blob = new Blob([text], {type: 'text/javascript'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'audio_settings.js';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    $('status').textContent = '工具伺服器沒開，已改成下載到「下載」資料夾。接著跑：./deploy.sh --audio';
+    return false;
+  }
+}
+
+async function saveAndDeploy() {
+  $('deploy').disabled = true;
+  const wrote = await saveToDisk();
+  if (!wrote) { $('deploy').disabled = false; return; }
+  $('status').textContent = '正在部署⋯（同步檔案＋推上 GitHub，約 10～30 秒）';
+  try {
+    const r = await fetch('/api/deploy', {method: 'POST'});
+    const j = await r.json();
+    $('status').innerHTML = (j.ok ? '✅ ' : '✗ ')
+      + '<span style="white-space:pre-wrap">' + j.msg.replace(/[<>]/g, '') + '</span>';
+  } catch (e) {
+    $('status').textContent = '✗ 部署失敗：' + e.message;
+  }
+  $('deploy').disabled = false;
+}
+
+$('mb').oninput = () => { $('mbv').textContent = (+$('mb').value / 100).toFixed(2); };
+$('ms').oninput = () => { $('msv').textContent = (+$('ms').value / 100).toFixed(2); };
+// ── 開檔就把上次存的 audio_settings.js 讀回來 ──
+// 沒有這一段的話：今天調遊輪存檔，明天開起來滑桿又回到出廠值，
+// 改個新聞音效再存，遊輪就被寫回去了——存了等於沒存。
+let SAVED = null;                       // 上次存檔的內容，「回到上次存檔」用
+function parseSettings(txt) {
+  // 不用 eval：只取 = 後面那段 JSON 出來 parse
+  const i = txt.indexOf('=', txt.indexOf('AUDIO_SETTINGS'));
+  const j = txt.lastIndexOf('}');
+  if (i < 0 || j < 0) throw new Error('格式不對');
+  return JSON.parse(txt.slice(i + 1, j + 1));
+}
+function applyLoaded(o) {
+  if (o.bgm) Object.keys(o.bgm).forEach(k => { if (TRACK_KEYS.has(k)) trim[k] = o.bgm[k]; });
+  if (o.sfx) Object.keys(o.sfx).forEach(k => { if (TRACK_KEYS.has(k)) trim[k] = o.sfx[k]; });
+  if (o.master) {
+    if (typeof o.master.bgm === 'number') { $('mb').value = Math.round(o.master.bgm * 100); $('mbv').textContent = o.master.bgm.toFixed(2); }
+    if (typeof o.master.sfx === 'number') { $('ms').value = Math.round(o.master.sfx * 100); $('msv').textContent = o.master.sfx.toFixed(2); }
+  }
+  build();
+}
+async function loadSaved() {
+  try {
+    const txt = await fetch('audio_settings.js?x=' + Date.now()).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });
+    SAVED = parseSettings(txt);
+    applyLoaded(SAVED);
+    const n = Object.keys(SAVED.sfx || {}).length + Object.keys(SAVED.bgm || {}).length;
+    $('loaded').innerHTML = `📂 已讀入上次存檔的 <b>audio_settings.js</b>（${n} 軌）——滑桿顯示的就是目前上線的值，改哪一軌就只會動哪一軌。`;
+  } catch (e) {
+    $('loaded').innerHTML = `⚠️ 找不到（或讀不懂）audio_settings.js，滑桿顯示的是<b>程式出廠值</b>。`
+                          + `這時候按存檔會用出廠值覆蓋線上設定，先確認過再存。`;
+    $('loaded').style.color = '#ffcf6b';
+  }
+}
+
+$('measure').onclick = measure;
+$('stop').onclick = () => { stop(); if (bgmEl) bgmEl.pause(); };
+$('save').onclick = saveToDisk;
+$('deploy').onclick = saveAndDeploy;
+$('reset').onclick = () => {
+  if (!confirm('把所有滑桿拉回程式出廠值？（還沒按存檔前不會影響線上）')) return;
+  TRACKS.forEach(t => trim[t.k] = DEFAULT_TRIM[t.k] == null ? 1 : DEFAULT_TRIM[t.k]);
+  $('mb').value = 80; $('mbv').textContent = '0.80';
+  $('ms').value = 70; $('msv').textContent = '0.70';
+  build();
+  $('status').textContent = '已回到出廠值（尚未存檔）。';
+};
+$('revert').onclick = () => {
+  if (!SAVED) return $('status').textContent = '沒有讀到存檔，無法還原。';
+  applyLoaded(SAVED);
+  $('status').textContent = '已還原成上次存檔的值。';
+};
+build();
+loadSaved();          // 一定要在 build() 之後：讀到的值要蓋掉出廠值
+// 用本機檔案開啟時 fetch 會被 CORS 全部擋掉、量測會全滅——先講清楚，不要讓人以為是檔案壞了
+$('proto').innerHTML = location.protocol === 'file:'
+  ? '<span class="bad">⚠ 目前是用本機檔案（file://）開啟，量測與試聽 mp3 都會失敗。請改用網址開啟。</span>'
+  : `<span style="color:var(--lo)">開啟方式：</span><span class="ok">${location.protocol}//${location.host}</span>`;
+</script>
+</body>
+</html>
