@@ -182,7 +182,7 @@ const SFX = {
   //   train 0.43：汽笛量出來 -19.6 dB，同理壓到跟 dice 齊平。
   //   ship 0.16：遊輪汽笛是低頻長音，量出來 -11.1 dB（比 dice 大 16 dB），要壓很多。
   //   plane_sfx 0.35：飛機起飛 -18.0 dB。
-  GAIN: {heli: 1.4, news: 0.30, train: 0.43, ship: 0.16, plane_sfx: 0.94},
+  GAIN: {heli: 1.4, news: 0.30, train: 0.43, ship: 0.16, plane_sfx: 0.94, card: 0.42},
   // 全部一次性音效都走這裡。cheer／heli 原本各自掛一個 <audio> 元素，
   // 而 iOS 的解鎖是「每一個元素」各自要在使用者手勢裡播過一次才算解鎖——
   // 到站慶祝與直升機都是動畫流程觸發的，永遠等不到屬於自己的手勢，
@@ -388,6 +388,36 @@ const SFX = {
   // 起音極快、衰減拉長，三個音互相重疊讓尾巴一起共鳴（單純的正弦波會像電子嗶聲）。
   // 音階用大三和弦上行 do–mi–so，明亮、有精神。
   // 放了 assets/audio/plane_sfx.mp3 會自動改用音檔。
+  // 抽卡：上行三音鈴琴（G5-C6-G6），尾韻拉長讓三個音疊在一起＝「叮叮鈴～」。
+  // 鈴琴音色用基音＋二倍＋三倍泛音疊出來；起音 6ms 幾乎是瞬間，衰減走指數，
+  // 這兩點是「鈴」與「嗡」的差別。量到 -19.5 dB，所以倍率 0.42 才跟擲骰子齊平。
+  cardDraw() {
+    if (this.muted) return;
+    if (this.buffers.card) { this.play('card'); return; }
+    const c = this._ensureCtx(); if (!c) return;
+    this._resume(c);
+    const t = c.currentTime + 0.02;
+    const bus = c.createGain();
+    bus.gain.value = this.volume * (this.GAIN.card == null ? 1 : this.GAIN.card);
+    bus.connect(c.destination);
+    const bell = (f, t0, dur, g) => {
+      [[1, 1], [2, 0.30], [3, 0.12]].forEach(([mult, amp]) => {
+        const o = c.createOscillator(), gn = c.createGain();
+        o.type = 'sine';
+        o.frequency.value = f * mult;
+        gn.gain.setValueAtTime(0, t0);
+        gn.gain.linearRampToValueAtTime(g * amp, t0 + 0.006);
+        gn.gain.exponentialRampToValueAtTime(0.0005, t0 + dur);
+        o.connect(gn); gn.connect(bus);
+        o.start(t0); o.stop(t0 + dur + 0.02);
+      });
+    };
+    bell(783.99,  t,        0.55, 0.20);   // G5
+    bell(1046.50, t + 0.09, 0.60, 0.20);   // C6
+    bell(1567.98, t + 0.18, 1.10, 0.22);   // G6
+    BGM.duck(1800);
+  },
+
   planeChime() {
     if (this.muted) return;
     if (this.buffers.plane_sfx) { this.play('plane_sfx'); return; }
