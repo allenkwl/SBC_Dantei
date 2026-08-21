@@ -182,7 +182,7 @@ const SFX = {
   //   train 0.43：汽笛量出來 -19.6 dB，同理壓到跟 dice 齊平。
   //   ship 0.16：遊輪汽笛是低頻長音，量出來 -11.1 dB（比 dice 大 16 dB），要壓很多。
   //   plane_sfx 0.35：飛機起飛 -18.0 dB。
-  GAIN: {heli: 1.4, news: 0.30, train: 0.43, ship: 0.16, plane_sfx: 0.35},
+  GAIN: {heli: 1.4, news: 0.30, train: 0.43, ship: 0.16, plane_sfx: 0.94},
   // 全部一次性音效都走這裡。cheer／heli 原本各自掛一個 <audio> 元素，
   // 而 iOS 的解鎖是「每一個元素」各自要在使用者手勢裡播過一次才算解鎖——
   // 到站慶祝與直升機都是動畫流程觸發的，永遠等不到屬於自己的手勢，
@@ -379,11 +379,16 @@ const SFX = {
     BGM.duck(Math.round(DUR * 1000) + 300);
   },
 
-  // ── 飛機起飛（約 2.2 秒）──
-  // 玩家走到飛機航線時響一次。噴射引擎不是「某個音高」而是**寬頻噪音**，
-  // 所以主體用白噪＋帶通濾波，把濾波中心頻率一路往上掃（由遠而近、由低而高），
-  // 再墊一層低頻轟鳴。用振盪器做會像哨子，不像飛機。
-  planeTakeoff() {
+  // ── 飛機航線的廣播三連音（約 2.4 秒）──
+  // 玩家走到飛機航線時響一次。改成「機場／百貨公司廣播前的三連音」而不是引擎聲：
+  // 引擎聲用寬頻噪音做出來雖然像飛機，但在遊戲裡只是一團嘶嘶聲、不好聽也不明確。
+  // 三連音是「接下來有事要發生」的通用語彙，跟登機廣播的情境也對得上。
+  //
+  // 鐘鈴音色的關鍵是**泛音＋長衰減**：每個音除了基頻，再疊 2 倍與 3 倍頻的弱泛音，
+  // 起音極快、衰減拉長，三個音互相重疊讓尾巴一起共鳴（單純的正弦波會像電子嗶聲）。
+  // 音階用大三和弦上行 do–mi–so，明亮、有精神。
+  // 放了 assets/audio/plane_sfx.mp3 會自動改用音檔。
+  planeChime() {
     if (this.muted) return;
     if (this.buffers.plane_sfx) { this.play('plane_sfx'); return; }
     const c = this._ensureCtx(); if (!c) return;
@@ -392,34 +397,25 @@ const SFX = {
     const bus = c.createGain();
     bus.gain.value = this.volume * (this.GAIN.plane_sfx == null ? 1 : this.GAIN.plane_sfx);
     bus.connect(c.destination);
-    const DUR = 2.2;
-    // 引擎噪音：帶通中心從 320Hz 掃到 3200Hz，音量同步推上去再收
-    const n = Math.floor(c.sampleRate * DUR);
-    const b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-    const src = c.createBufferSource(); src.buffer = b;
-    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q = 1.1;
-    bp.frequency.setValueAtTime(320, t);
-    bp.frequency.exponentialRampToValueAtTime(3200, t + DUR * 0.78);
-    bp.frequency.exponentialRampToValueAtTime(1400, t + DUR);
-    const gn = c.createGain();
-    gn.gain.setValueAtTime(0.02, t);
-    gn.gain.linearRampToValueAtTime(0.42, t + DUR * 0.62);
-    gn.gain.exponentialRampToValueAtTime(0.0008, t + DUR);
-    src.connect(bp); bp.connect(gn); gn.connect(bus);
-    src.start(t);
-    // 低頻轟鳴：跟著一起推起來
-    const o = c.createOscillator(), og = c.createGain(), olp = c.createBiquadFilter();
-    olp.type = 'lowpass'; olp.frequency.value = 260;
-    o.type = 'sawtooth';
-    o.frequency.setValueAtTime(58, t);
-    o.frequency.linearRampToValueAtTime(96, t + DUR * 0.7);
-    og.gain.setValueAtTime(0.04, t);
-    og.gain.linearRampToValueAtTime(0.24, t + DUR * 0.6);
-    og.gain.exponentialRampToValueAtTime(0.0008, t + DUR);
-    o.connect(olp); olp.connect(og); og.connect(bus);
-    o.start(t); o.stop(t + DUR + 0.02);
-    BGM.duck(Math.round(DUR * 1000) + 300);
+
+    // 一個鐘聲：基頻＋兩個弱泛音，快起音、指數衰減
+    const bell = (f, t0, dur, g) => {
+      [[1, 1], [2, 0.32], [3, 0.14]].forEach(([mult, amp]) => {
+        const o = c.createOscillator(), gn = c.createGain();
+        o.type = 'sine';
+        o.frequency.value = f * mult;
+        gn.gain.setValueAtTime(0, t0);
+        gn.gain.linearRampToValueAtTime(g * amp, t0 + 0.008);   // 幾乎是瞬間起音
+        gn.gain.exponentialRampToValueAtTime(0.0006, t0 + dur);
+        o.connect(gn); gn.connect(bus);
+        o.start(t0); o.stop(t0 + dur + 0.02);
+      });
+    };
+    // do–mi–so 上行，間隔 0.30 秒；尾音拉長讓三個音一起共鳴
+    bell(523.25, t,        1.15, 0.26);   // C5
+    bell(659.25, t + 0.30, 1.25, 0.26);   // E5
+    bell(783.99, t + 0.60, 1.80, 0.30);   // G5
+    BGM.duck(2400);
   },
 
   // ── 新聞快報的號角（約 4 秒）──
