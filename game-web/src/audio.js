@@ -24,7 +24,9 @@ const audioURL = key => `assets/audio/${key}.mp3?v=${AUDIO_VER}`;
 // 一次性的手勢監聽，等使用者下一次碰畫面再補播。選角畫面本來就要點貓咪，
 // 音樂在第一次互動時自然就接上了。
 const BGM = {
-  KEYS: ['splash', 'setup', 'lobby', 'character_select', 'spring', 'summer', 'autumn', 'winter', 'debt', 'sea', 'plane'],
+  KEYS: ['splash', 'setup', 'lobby', 'character_select', 'spring', 'summer', 'autumn', 'winter', 'debt', 'sea', 'plane',
+         // 行進間配樂：擲完骰開始走才播，依玩家車型挑（見 rules 的 TRAIN_BGM）
+         'train_local', 'train_puyuma', 'train_hsr'],
   SEASON_KEY: {'春天': 'spring', '夏天': 'summer', '秋天': 'autumn', '冬天': 'winter'},
 
   // ── 音量 ──
