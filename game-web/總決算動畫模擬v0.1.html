@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>小球貓電鐵｜旅程最終總決算</title>
+<style>
+  :root{
+    --navy:#081c31;--deep:#0d2e4b;--blue:#167bad;--sky:#73d5f3;--cream:#fff8df;
+    --gold:#ffd148;--gold2:#f29a1f;--pink:#ff658d;--mint:#61d3ad;--ink:#14324a;
+    --ui:system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+  }
+  *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--navy);font-family:var(--ui);color:#fff}
+  button{font:inherit}.stage{position:fixed;inset:0;overflow:hidden;isolation:isolate;background:linear-gradient(#118bc1 0 55%,#68d1ee 55% 73%,#dff7fb 73%)}
+  .sun{position:absolute;top:12%;right:8%;width:min(16vw,170px);aspect-ratio:1;border-radius:50%;background:#fff4a8;box-shadow:0 0 0 18px #fff3a82c,0 0 80px #fff1a6;opacity:.85}
+  .cloud{position:absolute;width:150px;height:33px;border-radius:99px;background:#fff9;filter:drop-shadow(0 5px 8px #1450701c);animation:cloud 25s linear infinite}.cloud:before,.cloud:after{content:"";position:absolute;border-radius:50%;background:inherit}.cloud:before{width:66px;height:66px;left:26px;bottom:0}.cloud:after{width:86px;height:86px;right:15px;bottom:0}.cloud.c1{top:20%;left:-180px}.cloud.c2{top:8%;left:52%;scale:.62;animation-delay:-14s}@keyframes cloud{to{transform:translateX(calc(100vw + 360px))}}
+  .hills{position:absolute;left:-5%;right:-5%;bottom:21%;height:31%;background:#7dbd80;clip-path:polygon(0 56%,8% 35%,17% 60%,29% 16%,40% 62%,50% 35%,61% 59%,73% 12%,86% 56%,100% 30%,100% 100%,0 100%);filter:drop-shadow(0 -7px 0 #d5f09d)}
+  .city{position:absolute;left:0;right:0;bottom:20%;height:18%;opacity:.38;background:repeating-linear-gradient(90deg,#2d6c7d 0 35px,transparent 35px 48px);clip-path:polygon(0 55%,4% 55%,4% 20%,8% 20%,8% 60%,13% 60%,13% 5%,18% 5%,18% 50%,23% 50%,23% 28%,29% 28%,29% 65%,35% 65%,35% 15%,40% 15%,40% 54%,46% 54%,46% 32%,52% 32%,52% 62%,58% 62%,58% 10%,64% 10%,64% 55%,70% 55%,70% 22%,77% 22%,77% 60%,83% 60%,83% 4%,89% 4%,89% 54%,94% 54%,94% 27%,100% 27%,100% 100%,0 100%)}
+  .platform{position:absolute;z-index:2;left:0;right:0;bottom:0;height:24%;background:linear-gradient(#eee6cf 0 12%,#5d6970 12% 17%,#a7a199 17% 22%,#404a51 22% 25%,#b9b0a5 25% 100%)}
+  .platform:before{content:"";position:absolute;left:0;right:0;top:40%;height:8px;background:repeating-linear-gradient(90deg,#fff3bc 0 32px,#e6b938 32px 64px)}
+  .track{position:absolute;z-index:3;left:-2%;right:-2%;bottom:3.5%;height:7%;border-top:8px solid #3c454b;border-bottom:8px solid #3c454b;background:repeating-linear-gradient(90deg,transparent 0 28px,#596268 28px 41px,transparent 41px 70px)}
+  .train{position:absolute;z-index:4;left:-32%;bottom:6%;width:min(31vw,430px);transform:scaleX(-1);filter:drop-shadow(0 10px 5px #152d3f55);animation:trainIn 1.7s cubic-bezier(.2,.7,.25,1) forwards;animation-play-state:paused}.running .train{animation-play-state:running}@keyframes trainIn{to{left:4%}}
+
+  .topbar{position:absolute;z-index:20;inset:0 0 auto;height:70px;padding:0 clamp(18px,4vw,56px);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#082038f4,#123e5be8);border-bottom:3px solid #ffffff48;box-shadow:0 5px 22px #05223b55}
+  .brand{font-weight:950;letter-spacing:.14em;font-size:clamp(13px,1.7vw,22px)}.year-chip{padding:.48em 1em;border:2px solid #ffffff73;border-radius:99px;background:#fff1;color:#fff;font-weight:850;font-size:clamp(11px,1.3vw,16px)}
+  .headline{position:absolute;z-index:9;top:9.5%;left:50%;width:90%;transform:translateX(-50%);text-align:center;text-shadow:0 4px 0 #105171,0 8px 25px #0a345a66}
+  .eyebrow{display:inline-block;padding:.32em 1.2em;border-radius:99px;background:#fff;color:#16729f;font-size:clamp(10px,1.2vw,15px);font-weight:950;letter-spacing:.22em;box-shadow:0 4px 0 #b7e6ef}
+  .headline h1{margin:.28em 0 0;font-size:clamp(31px,5.4vw,76px);line-height:1;color:#fff8d7;letter-spacing:.08em}.headline h1 span{color:var(--gold)}
+  .headline p{margin:.5em 0 0;font-weight:850;font-size:clamp(12px,1.45vw,19px)}
+
+  .podium-zone{position:absolute;z-index:12;left:50%;bottom:18%;width:min(920px,94vw);height:52%;transform:translateX(-50%);display:flex;align-items:flex-end;justify-content:center;gap:clamp(7px,1.6vw,20px);pointer-events:none}
+  .player{--accent:#fff;position:relative;width:min(25vw,215px);height:var(--h);display:flex;flex-direction:column;justify-content:flex-end;opacity:0;transform:translateY(120px) scale(.78);transition:opacity .65s ease,transform .75s cubic-bezier(.18,.9,.25,1.2);order:var(--order)}
+  .player.reveal{opacity:1;transform:none}.player.first{width:min(29vw,250px)}
+  .avatar-wrap{position:relative;z-index:2;width:72%;aspect-ratio:1;margin:0 auto -12px;border-radius:28% 28% 18% 18%;background:linear-gradient(#fff,#e5f6fb);border:6px solid var(--accent);box-shadow:0 9px 0 #123a55aa,0 18px 28px #0829425e;overflow:hidden;transform-origin:50% 100%}
+  .first .avatar-wrap{width:84%;border-width:8px}.reveal .avatar-wrap{animation:bounceAvatar .7s .22s both}@keyframes bounceAvatar{0%{transform:scale(.25) rotate(-12deg)}65%{transform:scale(1.1) rotate(4deg)}100%{transform:none}}
+  .avatar-wrap img{width:100%;height:100%;object-fit:contain}.crown{position:absolute;z-index:4;top:-39px;left:50%;transform:translateX(-50%) rotate(-7deg);font-size:52px;filter:drop-shadow(0 5px 2px #7f4d0b66);opacity:0}.first.reveal .crown{animation:crownDrop .7s .55s forwards}@keyframes crownDrop{from{opacity:0;transform:translate(-50%,-70px) rotate(18deg)}to{opacity:1;transform:translateX(-50%) rotate(-7deg)}}
+  .nameplate{position:relative;z-index:3;margin:0 7%;padding:9px 5px;border-radius:12px;background:linear-gradient(#fff9e0,#ffd964);border:3px solid #fff;color:#573810;text-align:center;box-shadow:0 5px 0 #bc701b;font-weight:950;font-size:clamp(13px,1.55vw,20px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .amount{display:block;margin-top:2px;color:#0e5576;font-size:.72em}.block{position:relative;margin:0 auto;width:90%;height:calc(var(--h) * .38);min-height:74px;border-radius:13px 13px 0 0;background:linear-gradient(90deg,#1476a4,#27a1c9 50%,#12688f);border:4px solid #e5fbff;border-bottom:0;box-shadow:inset 0 7px 0 #ffffff26,0 12px 20px #08294255;color:#fff;text-align:center;padding-top:16px;font-size:clamp(29px,4vw,55px);font-weight:1000;text-shadow:0 4px 0 #0b5274}
+  .first .block{background:linear-gradient(90deg,#dc8f0d,#ffd94c 50%,#d7830c);color:#fff9da;text-shadow:0 4px 0 #9d5905}.rank-word{display:block;font-size:10px;letter-spacing:.24em;text-shadow:none;opacity:.85}
+  .lower-ranks{position:absolute;z-index:14;left:clamp(12px,2.5vw,40px);top:27%;width:min(230px,22vw);display:grid;gap:8px}.mini-player{display:grid;grid-template-columns:32px 42px 1fr;align-items:center;gap:8px;padding:6px 8px;border:2px solid #fff8;border-radius:11px;background:#0b3454dc;box-shadow:0 5px 12px #08283b40;opacity:0;transform:translateX(-70px);transition:.55s}.mini-player.reveal{opacity:1;transform:none}.mini-player img{width:42px;height:42px;border-radius:9px;background:#fff;object-fit:contain}.mini-rank{font-size:18px;font-weight:950;color:var(--gold);text-align:center}.mini-name{font-size:12px;font-weight:900;overflow:hidden;text-overflow:ellipsis}.mini-total{display:block;font-size:10px;color:#bfeaff;margin-top:2px}
+
+  .tally{position:absolute;z-index:30;left:50%;top:52%;transform:translate(-50%,-50%) scale(.8);width:min(620px,86vw);padding:24px;border:5px solid #fff1af;border-radius:26px;background:#0a3453ee;text-align:center;box-shadow:0 18px 0 #08253dbb,0 28px 50px #061d3299;opacity:0;pointer-events:none;transition:.35s}.tally.show{opacity:1;transform:translate(-50%,-50%) scale(1)}.tally-label{color:#bdeeff;font-weight:900;letter-spacing:.18em}.tally-number{margin:.18em 0;color:var(--gold);font-size:clamp(40px,7vw,82px);font-weight:1000;font-variant-numeric:tabular-nums}.tally-track{height:12px;border-radius:99px;background:#041c2e;overflow:hidden}.tally-fill{width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--pink),var(--gold),var(--mint))}.show .tally-fill{animation:tally 1.7s ease forwards}@keyframes tally{to{width:100%}}.tally-note{margin-top:12px;font-weight:800;font-size:13px}
+  .winner-banner{position:absolute;z-index:26;left:50%;top:22%;transform:translate(-50%,-30px) scale(.8);width:min(720px,90vw);padding:10px 26px;border-radius:18px;background:linear-gradient(90deg,#d87a0e,#ffe564 50%,#d87a0e);border:4px solid #fffbd4;color:#5d3500;text-align:center;box-shadow:0 8px 0 #9d5708,0 18px 30px #08294266;font-size:clamp(19px,3vw,38px);font-weight:1000;letter-spacing:.09em;opacity:0;transition:.55s cubic-bezier(.2,.9,.3,1.3)}.winner-banner.show{opacity:1;transform:translate(-50%,0) scale(1)}
+  .winner-banner small{display:block;font-size:.38em;letter-spacing:.18em;margin-bottom:3px}
+  .details{position:absolute;z-index:25;right:clamp(12px,2.4vw,38px);top:27%;width:min(245px,24vw);display:grid;gap:9px;opacity:0;transform:translateX(50px);transition:.55s}.details.show{opacity:1;transform:none}.detail{padding:9px 12px;border:2px solid #fff8;border-radius:12px;background:#0b3454e8;box-shadow:0 5px 14px #08283b40}.detail-label{display:block;color:#aee9fa;font-size:10px;font-weight:850}.detail-value{display:block;margin-top:2px;color:#fff2a9;font-size:clamp(12px,1.35vw,17px);font-weight:950}.award{background:linear-gradient(135deg,#9e3261e8,#d64e7fe8);border-color:#ffc4d6}.award .detail-label,.award .detail-value{color:#fff}
+
+  .confetti,.fireworks{position:absolute;z-index:35;inset:0;pointer-events:none;overflow:hidden}.confetti i{position:absolute;left:var(--x);top:-25px;width:10px;height:18px;border-radius:2px;background:var(--c);opacity:0}.celebrate .confetti i{animation:fall var(--s) linear var(--d) infinite}@keyframes fall{0%{opacity:1;transform:translate(0,-20px) rotate(0)}100%{opacity:1;transform:translate(var(--dx),110vh) rotate(900deg)}}
+  .burst{position:absolute;left:var(--x);top:var(--y);width:8px;height:8px;border-radius:50%;opacity:0;box-shadow:0 -65px var(--c),46px -46px var(--c),65px 0 var(--c),46px 46px var(--c),0 65px var(--c),-46px 46px var(--c),-65px 0 var(--c),-46px -46px var(--c)}.celebrate .burst{animation:burst 1.6s var(--d) infinite}@keyframes burst{0%{opacity:0;transform:scale(.05)}30%{opacity:1}80%,100%{opacity:0;transform:scale(1.35)}}
+  .actions{position:absolute;z-index:45;left:50%;bottom:3.5%;transform:translateX(-50%) translateY(40px);display:flex;gap:10px;opacity:0;transition:.4s}.actions.show{opacity:1;transform:translateX(-50%)}.btn{height:46px;padding:0 22px;border:3px solid #fff;border-radius:99px;cursor:pointer;color:#fff;background:linear-gradient(#35677d,#18384c);box-shadow:0 5px 0 #092438,0 10px 18px #08294255;font-weight:900;white-space:nowrap}.btn.primary{color:#4b3100;background:linear-gradient(#ffe879,#f4a822);box-shadow:0 5px 0 #aa640c,0 10px 18px #08294255}.btn:active{transform:translateY(4px);box-shadow:none}.btn:focus-visible{outline:4px solid #fff;outline-offset:4px}
+  .skip{position:absolute;z-index:45;right:16px;bottom:16px;width:42px;height:42px;padding:0;border:2px solid #fff8;border-radius:50%;background:#082b46cc;color:#fff;cursor:pointer;font-size:16px}.hint{position:absolute;z-index:20;left:18px;bottom:15px;color:#163c50;font-size:11px;font-weight:850}
+  .start{position:absolute;z-index:100;inset:0;display:grid;place-items:center;background:linear-gradient(145deg,#08223cef,#0c4c70e8);backdrop-filter:blur(9px);transition:.55s}.start.hide{opacity:0;pointer-events:none}.ticket{width:min(620px,88vw);padding:clamp(24px,5vw,48px);border:5px solid #fff5c0;border-radius:30px;background:linear-gradient(155deg,#0e567c,#0a2c49);text-align:center;box-shadow:0 13px 0 #061d32,0 25px 70px #041727aa}.ticket .paw{font-size:42px}.ticket h2{margin:.2em 0;color:#fff6c4;font-size:clamp(28px,5vw,58px);letter-spacing:.08em}.ticket p{color:#c5efff;font-weight:800;line-height:1.7}.start-btn{margin-top:16px;height:58px;padding:0 36px;border:4px solid #fff;border-radius:99px;background:linear-gradient(#ffe774,#f5a51c);color:#4b3000;box-shadow:0 7px 0 #a85f0a;font-weight:1000;font-size:18px;cursor:pointer;animation:startPulse 1.2s ease-in-out infinite alternate}@keyframes startPulse{to{transform:scale(1.06);box-shadow:0 7px 0 #a85f0a,0 0 0 12px #ffd44d20}}
+  .start small{display:block;margin-top:18px;color:#91cde4;font-weight:750}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  @media(max-width:700px){.topbar{height:54px}.headline{top:8.5%}.headline p{display:none}.podium-zone{bottom:19%;height:55%;gap:3px}.player{width:29vw}.player.first{width:34vw}.avatar-wrap{border-width:4px;border-radius:20px}.first .avatar-wrap{border-width:5px}.nameplate{margin:0;padding:6px 2px;border-width:2px;border-radius:8px}.block{width:96%;padding-top:11px;border-width:3px}.lower-ranks{top:auto;bottom:16%;left:4%;right:4%;width:auto;display:flex;overflow:hidden}.mini-player{min-width:142px;grid-template-columns:25px 32px 1fr;padding:4px}.mini-player img{width:32px;height:32px}.details{top:auto;right:3%;bottom:15%;width:45vw;gap:4px}.detail{padding:5px 8px}.detail:nth-child(2){display:none}.winner-banner{top:20%}.actions{bottom:2%}.btn{height:40px;padding:0 15px;font-size:12px}.hint{display:none}.train{width:42vw}.skip{top:62px;bottom:auto}.crown{font-size:36px;top:-28px}}
+  @media(max-height:620px){.headline{top:11%}.headline h1{font-size:34px}.headline p{display:none}.podium-zone{bottom:13%;height:58%}.platform{height:18%}.track{bottom:2%}.actions{bottom:1%}.details,.lower-ranks{top:30%}.winner-banner{top:20%}}
+  @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<main class="stage" id="stage" aria-label="小球貓電鐵最終總決算動畫">
+  <div class="sun"></div><div class="cloud c1"></div><div class="cloud c2"></div><div class="hills"></div><div class="city"></div>
+  <div class="platform"></div><div class="track"></div><img class="train" src="assets/trains/train_local_v2.png" alt="普通車抵達終點站">
+  <header class="topbar"><span class="brand">🐾 小球貓電鐵・終點慶典</span><span class="year-chip" id="year-chip">第 5 年・旅程完結</span></header>
+  <section class="headline"><span class="eyebrow">FINAL DESTINATION</span><h1>旅程最終<span>總決算</span></h1><p>沿途的歡笑與努力，都在這一刻閃閃發光！</p></section>
+  <section class="podium-zone" id="podium" aria-live="polite"></section>
+  <section class="lower-ranks" id="lower-ranks" aria-label="其他玩家名次"></section>
+  <section class="tally" id="tally"><div class="tally-label">全線資產統計中</div><div class="tally-number" id="tally-number">0 元</div><div class="tally-track"><div class="tally-fill"></div></div><div class="tally-note" id="tally-note">正在清點現金、物產與一路上的美好回憶…</div></section>
+  <div class="winner-banner" id="winner-banner"><small>🏆 本屆小球貓電鐵總冠軍 🏆</small><span id="winner-name">探險家</span>，恭喜登上第一名！</div>
+  <aside class="details" id="details" aria-label="冠軍資產明細"></aside>
+  <div class="fireworks" id="fireworks"></div><div class="confetti" id="confetti"></div>
+  <div class="actions" id="actions"><button class="btn primary" id="replay">↻ 再看一次</button><button class="btn" id="continue">一起拍張紀念照！</button></div>
+  <button class="skip" id="skip" title="跳到最終結果" aria-label="跳到最終結果">»</button><span class="hint">空白鍵／A：加速揭曉　｜　Enter：確認</span>
+  <div class="start" id="start"><div class="ticket"><div class="paw">🐾</div><h2>終點站到了！</h2><p>所有列車即將進站，準備揭曉這趟旅程的最終排名。</p><button class="start-btn" id="start-btn">開始總決算</button><small>按 A、Enter 或空白鍵也可以開始</small></div></div>
+  <p class="sr-only" id="announcement" aria-live="assertive"></p>
+</main>
+<audio id="cheer" src="assets/audio/cheer.mp3" preload="auto"></audio>
+<script>
+(() => {
+  const SAMPLE = [
+    {name:'探險家', avatar:'assets/avatars/探險家.png', money:12860000, stallsValue:23540000, total:36400000, stalls:18, award:'環島投資王'},
+    {name:'旅行家', avatar:'assets/avatars/旅行家.png', money:15320000, stallsValue:16780000, total:32100000, stalls:14, award:'幸運到站王'},
+    {name:'站長', avatar:'assets/avatars/站長.png', money:9800000, stallsValue:18450000, total:28250000, stalls:16, award:'鐵道收藏王'},
+    {name:'賓士', avatar:'assets/avatars/賓士.png', money:11450000, stallsValue:12200000, total:23650000, stalls:11, award:'逆轉衝刺王'}
+  ];
+  const ACCENTS=['#ffd148','#a9cbd8','#e39a58','#7ed9bd','#ff8bac','#a99afa','#73d87d','#bc8b63'];
+  const stage=document.getElementById('stage'),podium=document.getElementById('podium'),lower=document.getElementById('lower-ranks');
+  const tally=document.getElementById('tally'),tallyNumber=document.getElementById('tally-number'),tallyNote=document.getElementById('tally-note');
+  const banner=document.getElementById('winner-banner'),details=document.getElementById('details'),actions=document.getElementById('actions');
+  const announcement=document.getElementById('announcement'),cheer=document.getElementById('cheer'),start=document.getElementById('start');
+  let ranking=SAMPLE.slice().sort((a,b)=>b.total-a.total), years=5, timers=[], running=false, finished=false, counterRAF=0;
+  const money=n=>`${Math.round(Number(n)||0).toLocaleString('zh-TW')} 元`;
+  const safe=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const later=(fn,ms)=>{const id=setTimeout(fn,ms);timers.push(id);return id};
+  function normalize(data){return data.map((p,i)=>{const stallsValue=Number(p.stallsValue)||0,m=Number(p.money)||0;return {...p,name:p.name||`玩家 ${i+1}`,avatar:p.avatar||'assets/avatars/站長.png',money:m,stallsValue,total:Number(p.total)||(m+stallsValue),stalls:Number(p.stalls ?? p.stallCount)||0,award:p.award||['環島達人','投資高手','幸運旅人','鐵道之星'][i%4]};}).sort((a,b)=>b.total-a.total)}
+  function build(){
+    document.getElementById('year-chip').textContent=`第 ${years} 年・旅程完結`;
+    podium.innerHTML='';lower.innerHTML='';
+    const top=ranking.slice(0,3), visual=[top[1],top[0],top[2]].filter(Boolean);
+    visual.forEach((p,vi)=>{const rank=ranking.indexOf(p)+1,el=document.createElement('article');el.className=`player rank-${rank} ${rank===1?'first':''}`;el.dataset.rank=rank;el.style.cssText=`--order:${vi};--accent:${ACCENTS[rank-1]};--h:${rank===1?'390px':rank===2?'330px':'285px'}`;el.innerHTML=`<div class="avatar-wrap"><span class="crown">👑</span><img src="${safe(p.avatar)}" alt="${safe(p.name)}"></div><div class="nameplate">${safe(p.name)}<span class="amount">${money(p.total)}</span></div><div class="block"><span class="rank-word">FINAL RANK</span>${rank}</div>`;podium.appendChild(el)});
+    ranking.slice(3).forEach((p,i)=>{const rank=i+4,el=document.createElement('article');el.className='mini-player';el.dataset.rank=rank;el.innerHTML=`<span class="mini-rank">${rank}</span><img src="${safe(p.avatar)}" alt=""><span class="mini-name">${safe(p.name)}<small class="mini-total">${money(p.total)}</small></span>`;lower.appendChild(el)});
+    const w=ranking[0];document.getElementById('winner-name').textContent=w.name;
+    details.innerHTML=`<div class="detail"><span class="detail-label">💵 最終現金</span><span class="detail-value">${money(w.money)}</span></div><div class="detail"><span class="detail-label">🏪 物產價值・${w.stalls||'—'} 處</span><span class="detail-value">${money(w.stallsValue)}</span></div><div class="detail award"><span class="detail-label">本屆特別稱號</span><span class="detail-value">✨ ${safe(w.award)} ✨</span></div>`;
+  }
+  function makeParty(){
+    const conf=document.getElementById('confetti'),fire=document.getElementById('fireworks');conf.innerHTML='';fire.innerHTML='';
+    const cs=['#ffd148','#ff638c','#63d7b0','#7cbbff','#fff','#b78cff'];
+    for(let i=0;i<80;i++)conf.insertAdjacentHTML('beforeend',`<i style="--x:${Math.random()*100}%;--c:${cs[i%cs.length]};--d:${Math.random()*1.8}s;--s:${2.7+Math.random()*2}s;--dx:${-100+Math.random()*200}px"></i>`);
+    for(let i=0;i<7;i++)fire.insertAdjacentHTML('beforeend',`<i class="burst" style="--x:${12+Math.random()*76}%;--y:${14+Math.random()*42}%;--c:${cs[i%cs.length]};--d:${Math.random()*1.5}s"></i>`);
+  }
+  function countTo(total){cancelAnimationFrame(counterRAF);const begin=performance.now(),dur=1750;function tick(now){const t=Math.min(1,(now-begin)/dur),ease=1-Math.pow(1-t,3);tallyNumber.textContent=money(total*ease);if(t<1)counterRAF=requestAnimationFrame(tick)}counterRAF=requestAnimationFrame(tick)}
+  function reveal(rank){const el=document.querySelector(`[data-rank="${rank}"]`);if(el)el.classList.add('reveal');const p=ranking[rank-1];if(p)announcement.textContent=`第 ${rank} 名，${p.name}，總資產 ${money(p.total)}`}
+  function finish(){
+    if(finished)return;finished=true;tally.classList.remove('show');ranking.forEach((_,i)=>reveal(i+1));
+    banner.classList.add('show');details.classList.add('show');actions.classList.add('show');stage.classList.add('celebrate');announcement.textContent=`總冠軍是 ${ranking[0].name}！恭喜所有玩家完成旅程！`;
+    cheer.currentTime=0;cheer.volume=.72;cheer.play().catch(()=>{});document.getElementById('replay').focus();
+  }
+  function run(){
+    timers.forEach(clearTimeout);timers=[];cancelAnimationFrame(counterRAF);running=true;finished=false;build();makeParty();
+    stage.classList.remove('celebrate');stage.classList.add('running');tally.classList.remove('show');banner.classList.remove('show');details.classList.remove('show');actions.classList.remove('show');
+    document.querySelectorAll('.reveal').forEach(el=>el.classList.remove('reveal'));cheer.pause();cheer.currentTime=0;
+    later(()=>{tally.classList.add('show');countTo(ranking.reduce((s,p)=>s+p.total,0));announcement.textContent='正在清點所有玩家的最終資產';},650);
+    later(()=>{tallyNote.textContent='排名確認完成，列車即將進站！';},2100);
+    const lowerRanks=[];for(let r=ranking.length;r>=4;r--)lowerRanks.push(r);lowerRanks.forEach((r,i)=>later(()=>reveal(r),2800+i*650));
+    const base=2800+lowerRanks.length*650;later(()=>reveal(3),base+300);later(()=>reveal(2),base+1450);
+    later(()=>{tally.classList.add('show');tallyNote.textContent='最後一位——本屆總冠軍究竟是誰？';tallyNumber.textContent='？？？';},base+2350);
+    later(()=>{tally.classList.remove('show');reveal(1);},base+3650);later(finish,base+4300);
+  }
+  function requestGameFullscreen(){
+    if(document.fullscreenElement||document.webkitFullscreenElement)return;
+    const root=document.documentElement,enter=root.requestFullscreen||root.webkitRequestFullscreen;
+    if(!enter)return;
+    try{const result=enter.call(root);if(result&&typeof result.catch==='function')result.catch(()=>{});}catch(_){/* 不支援時仍正常開始動畫 */}
+  }
+  function begin(){if(running)return;start.classList.add('hide');run()}
+  function replay(){running=false;stage.classList.remove('running');void stage.offsetWidth;run()}
+  function skip(){if(!running){begin();return}timers.forEach(clearTimeout);timers=[];finish()}
+  document.getElementById('start-btn').onclick=()=>{requestGameFullscreen();begin()};document.getElementById('replay').onclick=replay;document.getElementById('skip').onclick=skip;
+  document.getElementById('continue').onclick=()=>{stage.classList.add('celebrate');announcement.textContent='喀擦！留下大家在終點站最燦爛的紀念照！';const b=document.getElementById('continue');b.textContent='📸 喀擦！最棒的旅程！';b.disabled=true};
+  addEventListener('keydown',e=>{if(['Space','Enter'].includes(e.code)||e.key==='a'||e.key==='A'){e.preventDefault();if(!running)begin();else if(!finished)skip();else if(e.code==='Enter')replay();}});
+  window.playFinale=(data,totalYears=5)=>{if(Array.isArray(data)&&data.length){ranking=normalize(data);years=Number(totalYears)||5;running=false;start.classList.add('hide');run()}};
+  build();makeParty();
+})();
+</script>
+</body>
+</html>

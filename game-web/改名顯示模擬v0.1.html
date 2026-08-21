@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>改名顯示模擬 v0.1</title>
+<style>
+  :root {
+    --navy:#0C1A28; --panel:#172B40cc; --rim:#254663;
+    --amber:#F0A020; --text:#D4E6F4; --lo:#5E84A4;
+    --ui: system-ui,-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:18px; background:#0a1420; color:var(--text); font-family:var(--ui); font-size:14px; }
+  .wrap { max-width:1180px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; color:var(--amber); }
+  .lead { color:var(--lo); font-size:13px; line-height:1.75; margin-bottom:16px; }
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:11px 13px; margin-bottom:16px;
+         background:#132437; border:1px solid var(--rim); border-radius:11px; font-size:12.5px; }
+  .bar b { color:var(--lo); font-weight:400; margin-right:2px; }
+  button { font-family:var(--ui); font-size:12.5px; cursor:pointer; padding:6px 12px; border-radius:8px;
+           background:linear-gradient(#355f77,#1b374b); color:#fff; border:2px solid #5fa1c2; }
+  button.on { border-color:var(--amber); background:rgba(240,160,32,.22); }
+  h2 { font-size:13px; color:var(--lo); font-weight:400; margin:24px 0 10px;
+       padding-bottom:6px; border-bottom:1px solid var(--rim); letter-spacing:1px; }
+  .note { color:var(--lo); font-size:12px; line-height:1.7; margin-top:9px; }
+  .note b { color:var(--text); }
+
+  /* ── 以下樣式從遊戲本體 v2.25 複製，只在必要處加東西 ── */
+  #pick-grid { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; max-width:min(92vw,500px); margin:0 auto; }
+  .pick-card { width:110px; padding:10px 10px 8px; border-radius:14px;
+    background:var(--panel); border:3px solid var(--rim);
+    display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .pc-avatar { width:60px; height:60px; border-radius:12px; object-fit:contain; background:rgba(0,0,0,.25); }
+  .pc-name { font-size:13px; font-weight:700; color:var(--text); text-align:center; line-height:1.25; }
+  .pc-meta { font-size:11px; color:var(--lo); white-space:nowrap; }
+  .pc-state { font-size:11.5px; font-weight:700; padding:2px 7px; border-radius:9px; }
+  .pc-state.is-you { color:#0d2231; background:#7fe3ff; }
+  .pc-state.is-out { color:var(--lo); background:rgba(255,255,255,.06); }
+  .pc-hint { font-size:10.5px; color:var(--lo); }
+  /* 新增：角色本名的小字 */
+  .pc-char { font-size:10.5px; color:var(--lo); line-height:1; }
+
+  .as-chart-wrap { height:52vh; min-height:330px; padding:2%; border:3px solid #fff8; border-radius:22px; background:#08294355; }
+  .as-chart-wrap svg { width:100%; height:100%; overflow:visible; }
+  .as-grid { stroke:#fff5; stroke-width:1; }
+  .as-axis { fill:#e8f8ff; font-size:14px; font-weight:800; }
+  .as-line-label { font-size:16px; font-weight:900; stroke:#fff; stroke-width:3px; stroke-linejoin:round; paint-order:stroke fill; }
+  .as-line-sub { font-size:12px; font-weight:800; stroke:#fff; stroke-width:2.6px; stroke-linejoin:round; paint-order:stroke fill; opacity:.85; }
+
+  .go-card { background:var(--panel); border:1px solid var(--rim); border-radius:14px;
+    padding:20px 22px; min-width:300px; max-width:400px; margin:0 auto;
+    display:flex; flex-direction:column; gap:10px; }
+  .go-card h2 { color:var(--amber); font-size:17px; font-weight:700; margin:0 0 4px; text-align:center; border:0; padding:0; letter-spacing:0; }
+  .go-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px;
+    background:#1C3450; border:1.5px solid var(--rim); }
+  .go-row.go-first { border-color:var(--amber); background:rgba(240,160,32,.14); }
+  .go-rank-num { font-size:15px; font-weight:900; color:var(--lo); width:18px; }
+  .go-row.go-first .go-rank-num { color:var(--amber); }
+  .go-avatar { width:32px; height:32px; border-radius:7px; object-fit:contain; border:1.5px solid #fff; }
+  .go-total { margin-left:auto; color:#FFD54A; font-weight:700; font-size:14px; }
+  .go-name { line-height:1.25; }
+  .go-char { font-size:10.5px; color:var(--lo); }
+
+  /* HUD：對照用，證明「不加括號」的理由 */
+  .hud { display:inline-block; background:var(--panel); border:1px solid var(--rim); border-radius:10px;
+         padding:8px 10px; font-size:12px; line-height:1.6; backdrop-filter:blur(4px); }
+  .hud b { color:var(--amber); }
+  .hud .row2 { display:flex; align-items:center; gap:7px; margin-top:4px; }
+  .hud img { width:34px; height:34px; border-radius:8px; object-fit:contain; background:rgba(0,0,0,.25); }
+  .hud-wrap { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+  .hud-case { max-width:320px; }
+  .hud-case .cap { font-size:11.5px; color:var(--lo); margin-bottom:5px; }
+  .too-long { color:#ff9a9a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🐱 大廳名字帶到貓咪身上 — 顯示位置模擬</h1>
+<div class="lead">
+  規則：<b>開新局第一次認領</b>時，貓咪名字＝大廳名字（之後可在選角畫面直接改）；
+  <b>讀檔續玩一律沿用存檔裡的名字</b>，不會被大廳名字蓋掉。<br>
+  下面比較「角色本名要不要一起顯示」在三個位置的實際版面。樣式是從遊戲本體 v2.25 複製過來的。
+</div>
+
+<div class="bar">
+  <b>顯示方式</b>
+  <button data-m="0">現在這樣（只有角色本名）</button>
+  <button data-m="1" class="on">只有玩家名字</button>
+  <button data-m="2">玩家名字 ＋ 角色本名小字</button>
+  <span style="width:12px"></span>
+  <b>名字情境</b>
+  <button data-n="0" class="on">大家都改了名字</button>
+  <button data-n="1">都沒改（預設玩家 XX）</button>
+  <button data-n="2">名字很長</button>
+</div>
+
+<h2>① 選角畫面（我認為最需要角色本名的地方）</h2>
+<div id="pick-grid"></div>
+<div class="note" id="pick-note"></div>
+
+<h2>② 三月結算・資產折線圖（線尾標籤）</h2>
+<div class="as-chart-wrap"><svg id="chart" viewBox="0 0 900 420" preserveAspectRatio="xMidYMid meet"></svg></div>
+<div class="note" id="chart-note"></div>
+
+<h2>③ 遊戲結束排名</h2>
+<div class="go-card" id="go"></div>
+
+<h2>④ HUD（對照：為什麼我建議這裡不要加）</h2>
+<div class="hud-wrap" id="hud"></div>
+
+</div>
+
+<script>
+const CHARS = [
+  {key:'jukiu',     name:'探險家',   color:'#F08C00', avatar:'assets/avatars/探險家.png'},
+  {key:'heichu',    name:'賓士',     color:'#3A3A3A', avatar:'assets/avatars/賓士.png'},
+  {key:'baixue',    name:'旅行家',   color:'#B9BFC7', avatar:'assets/avatars/旅行家.png'},
+  {key:'lanpo',     name:'站長',     color:'#2B7FD4', avatar:'assets/avatars/站長.png'},
+  {key:'zuojia',    name:'作家',     color:'#E0568C', avatar:'assets/avatars/作家.png'},
+  {key:'shentong',  name:'小神童',   color:'#7E57C2', avatar:'assets/avatars/小神童.png'},
+  {key:'jingshen',  name:'精神小伙', color:'#2FA84F', avatar:'assets/avatars/精神小伙.png'},
+  {key:'chuanyuan', name:'船員',     color:'#8B5E34', avatar:'assets/avatars/船員.png'},
+];
+// 三種名字情境：改過名 / 都沒改 / 很長
+const NAMES = [
+  ['阿明', '小美', '爸爸', '阿嬤'],
+  ['玩家88', '玩家12', '玩家55', '玩家07'],
+  ['林小明的電鐵帝國', '會買很多夜市的人', '玩家88', '阿嬤'],
+];
+let mode = 1, nameSet = 0;
+// 前 4 隻被認領，其餘未選
+const CLAIMED = 4;
+
+function ownerOf(i) { return NAMES[nameSet][i]; }
+// 這一格顯示的「主要名字」：模式 0 是角色本名，其餘是玩家名字
+function mainName(i) { return mode === 0 ? CHARS[i].name : ownerOf(i); }
+
+function renderPick() {
+  const grid = document.getElementById('pick-grid');
+  grid.innerHTML = CHARS.map((c, i) => {
+    const claimed = i < CLAIMED;
+    const showChar = mode === 2 && claimed;
+    return `<div class="pick-card">
+      <img class="pc-avatar" src="${c.avatar}" alt="">
+      <div class="pc-name">${claimed ? mainName(i) : c.name}</div>
+      ${showChar ? `<div class="pc-char">${c.name}</div>` : ''}
+      <div class="pc-meta">💰100萬・置產 0</div>
+      <div class="pc-state ${claimed ? 'is-you' : 'is-out'}">${claimed ? '玩家 ' + (i+1) : '未選'}</div>
+      <div class="pc-hint">${claimed ? '✏️ A 改名' : 'A 我要這隻'}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('pick-note').innerHTML = mode === 1
+    ? '⚠️ 只有玩家名字時，<b>其他人看不出那張卡是哪隻貓</b>——尤其大家都沒改名的情境（按上面第二顆看看），會變成四張「玩家 XX」。頭像雖然還在，但要靠頭像記住八隻貓對不上名字。'
+    : mode === 2
+      ? '✅ 兩者並存：玩家名字為主、角色本名小字。卡片高度多 13px，八張排兩列仍在 500px 內。'
+      : '這是目前的樣子：完全看不出誰玩哪一隻。';
+}
+
+// 資產折線圖：資料與樣式照遊戲本體（線尾標在最後一個點右邊）
+const HIST = [
+  {year:1, v:[320, 280, 410, 250]},
+  {year:2, v:[520, 610, 480, 390]},
+  {year:3, v:[780, 690, 900, 520]},
+];
+function renderChart() {
+  const svg = document.getElementById('chart');
+  const w = 900, h = 420, left = 74, right = 210, top = 26, bottom = 54;
+  const max = Math.max(...HIST.flatMap(e => e.v)) * 1.15;
+  const x = i => left + (w - left - right) * (HIST.length === 1 ? .5 : i / (HIST.length - 1));
+  const y = v => h - bottom - (h - top - bottom) * (v / max);
+  let out = '';
+  for (let g = 0; g <= 4; g++) {
+    const gy = top + (h - top - bottom) * g / 4;
+    out += `<line class="as-grid" x1="${left}" y1="${gy}" x2="${w - right}" y2="${gy}"/>`;
+    out += `<text class="as-axis" x="${left - 12}" y="${gy + 5}" text-anchor="end">${Math.round(max * (1 - g/4))}</text>`;
+  }
+  HIST.forEach((e, i) => { out += `<text class="as-axis" x="${x(i)}" y="${h - 20}" text-anchor="middle">第 ${e.year} 年</text>`; });
+  CLAIMED_IDX().forEach((ci, n) => {
+    const c = CHARS[ci];
+    const pts = HIST.map((e, i) => `${x(i)},${y(e.v[n])}`).join(' ');
+    out += `<polyline points="${pts}" fill="none" stroke="${c.color}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`;
+    HIST.forEach((e, i) => { out += `<circle cx="${x(i)}" cy="${y(e.v[n])}" r="7" fill="${c.color}" stroke="#fff" stroke-width="3"/>`; });
+    const lx = Math.min(w - right + 12, x(HIST.length - 1) + 14);
+    const ly = y(HIST[HIST.length - 1].v[n]) + 5;
+    if (mode === 2) {
+      out += `<text class="as-line-label" x="${lx}" y="${ly - 6}" fill="${c.color}">${ownerOf(ci)}</text>`;
+      out += `<text class="as-line-sub" x="${lx}" y="${ly + 11}" fill="${c.color}">${c.name}</text>`;
+    } else {
+      out += `<text class="as-line-label" x="${lx}" y="${ly}" fill="${c.color}">${mainName(ci)}</text>`;
+    }
+  });
+  svg.innerHTML = out;
+  document.getElementById('chart-note').innerHTML = mode === 2
+    ? '✅ 兩行：玩家名字在上、角色本名在下（小一號、半透明）。線很接近時兩行會擠在一起，可以改成只在最後一年標。'
+    : '線尾標籤是這張圖<b>唯一</b>的辨識依據（這裡沒有頭像）。三年、五年之後線會交錯，只有名字可以對。';
+}
+function CLAIMED_IDX() { return [0,1,2,3]; }
+
+function renderGo() {
+  const rows = CLAIMED_IDX()
+    .map((ci, n) => ({ci, total: HIST[HIST.length-1].v[n]}))
+    .sort((a,b) => b.total - a.total);
+  document.getElementById('go').innerHTML = '<h2>🏆 最終排名</h2>' + rows.map((r, i) => {
+    const c = CHARS[r.ci];
+    return `<div class="go-row ${i===0?'go-first':''}">
+      <span class="go-rank-num">${i+1}</span>
+      <img class="go-avatar" src="${c.avatar}" alt="">
+      <span class="go-name">${mainName(r.ci)}${mode===2 ? `<br><span class="go-char">${c.name}</span>` : ''}</span>
+      <span class="go-total">${r.total}萬</span>
+    </div>`;
+  }).join('');
+}
+
+function renderHud() {
+  const cases = [
+    {cap:'只有玩家名字（我的建議）', txt: i => ownerOf(i)},
+    {cap:'加上角色本名', txt: i => `${ownerOf(i)}（${CHARS[i].name}）`},
+  ];
+  document.getElementById('hud').innerHTML = cases.map(cs => `
+    <div class="hud-case">
+      <div class="cap">${cs.cap}</div>
+      <div class="hud" style="width:230px">
+        第 3 年　4 月　<b>🎮 有控制權</b><br>
+        🚩 目的地：潮州（22）
+        <div class="row2"><img src="${CHARS[0].avatar}" alt="">
+          <span><b>${cs.txt(0)}</b><br>💰334萬　🃏1/8</span></div>
+      </div>
+    </div>`).join('') +
+    `<div class="hud-case"><div class="cap">名字很長的時候</div>
+      <div class="hud" style="width:230px">
+        第 3 年　4 月　<b>🎮 有控制權</b><br>
+        🚩 目的地：潮州（22）
+        <div class="row2"><img src="${CHARS[0].avatar}" alt="">
+          <span class="too-long"><b>${NAMES[2][0]}（探險家）</b><br>💰334萬　🃏1/8</span></div>
+      </div>
+      <div class="note">量測結果：三種都是 99px 高、都沒換行，<b>「會擠爆版面」不成立</b>——最長的
+        「林小明的電鐵帝國（探險家）」佔 156px，框寬 230px 還有餘裕。<br>
+        所以這裡不加的理由只剩一個：<b>頭像就在旁邊，角色身分本來就看得到</b>，加了是重複資訊。
+        真的想加也不會壞版面，由你決定。</div>
+    </div>`;
+}
+
+function draw() { renderPick(); renderChart(); renderGo(); renderHud(); }
+document.querySelectorAll('button[data-m]').forEach(b => b.onclick = () => {
+  mode = +b.dataset.m;
+  document.querySelectorAll('button[data-m]').forEach(x => x.classList.toggle('on', x === b));
+  draw();
+});
+document.querySelectorAll('button[data-n]').forEach(b => b.onclick = () => {
+  nameSet = +b.dataset.n;
+  document.querySelectorAll('button[data-n]').forEach(x => x.classList.toggle('on', x === b));
+  draw();
+});
+draw();
+</script>
+</body>
+</html>
