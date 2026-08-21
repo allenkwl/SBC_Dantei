@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>抽卡音效試聽 v0.1</title>
+<style>
+  :root { --navy:#0a1420; --panel:#132437; --rim:#254663; --amber:#F0A020;
+          --text:#D4E6F4; --lo:#5E84A4;
+          --ui: system-ui,-apple-system,'PingFang TC','Microsoft JhengHei',sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px 20px 40px; background:var(--navy); color:var(--text);
+         font-family:var(--ui); font-size:14px; }
+  .wrap { max-width:820px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 6px; color:var(--amber); }
+  .lead { color:var(--lo); font-size:13px; line-height:1.75; margin-bottom:18px; }
+  .bgmbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 13px;
+            background:var(--panel); border:1px solid var(--rim); border-radius:10px;
+            margin-bottom:20px; font-size:12.5px; color:var(--lo); }
+  button { font-family:var(--ui); cursor:pointer; border-radius:8px;
+           background:linear-gradient(#355f77,#1b374b); color:#fff; border:2px solid #5fa1c2;
+           padding:7px 13px; font-size:12.5px; }
+  button.amber { border-color:var(--amber); }
+  .row { display:flex; gap:14px; align-items:flex-start; padding:15px 16px; margin-bottom:11px;
+         background:var(--panel); border:1px solid var(--rim); border-radius:11px; }
+  .row .n { flex:0 0 30px; height:30px; border-radius:50%; display:grid; place-items:center;
+            background:#0b1725; border:1px solid var(--rim); color:var(--amber); font-weight:700; }
+  .row .body { flex:1 1 auto; }
+  .row .nm { font-weight:700; font-size:15px; margin-bottom:3px; }
+  .row .ds { color:var(--lo); font-size:12.5px; line-height:1.65; }
+  .row .mt { color:#7fa8c4; font-size:11.5px; margin-top:5px; font-variant-numeric:tabular-nums; }
+  .row .btns { flex:0 0 auto; display:flex; flex-direction:column; gap:6px; }
+  #note { margin-top:20px; color:var(--lo); font-size:12px; line-height:1.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🃏 抽卡音效試聽</h1>
+  <div class="lead">四個候選，全部是程式合成（不用音檔、手機也不會有載入失敗的問題）。<br>
+    音量都已經量測過、對齊擲骰子的響度，所以你聽到的大小就是遊戲裡的大小。</div>
+
+  <div class="bgmbar">
+    <span>先放背景音樂，才聽得出「避讓」的效果：</span>
+    <button id="bgm">▶ 播放春天 BGM</button>
+    <button id="bgmoff">⏹ 停</button>
+    <span id="bs"></span>
+  </div>
+
+  <div id="list"></div>
+
+  <div id="note">
+    每個候選都會壓低 BGM（跟遊戲一樣的引用計數避讓）。<br>
+    選好之後告訴我編號，我就接進遊戲的抽卡流程，並加進音量編輯器。
+  </div>
+</div>
+
+<script>
+const AC = window.AudioContext || window.webkitAudioContext;
+let ctx = null;
+const c = () => { if (!ctx) ctx = new AC(); if (ctx.state === 'suspended') ctx.resume(); return ctx; };
+
+// ── 共用小工具 ──
+function noiseBuf(cx, dur) {
+  const n = Math.floor(cx.sampleRate * dur);
+  const b = cx.createBuffer(1, n, cx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  return b;
+}
+// 紙張摩擦：帶通白噪音，頻率往上掃＝「唰」的那一下
+function paper(cx, out, t, dur, f0, f1, g) {
+  const s = cx.createBufferSource(); s.buffer = noiseBuf(cx, dur);
+  const bp = cx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q = 0.9;
+  bp.frequency.setValueAtTime(f0, t);
+  bp.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  const gn = cx.createGain();
+  gn.gain.setValueAtTime(0, t);
+  gn.gain.linearRampToValueAtTime(g, t + dur * 0.22);
+  gn.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  s.connect(bp); bp.connect(gn); gn.connect(out); s.start(t);
+}
+// 「啪」的一下：極短的高頻脈衝
+function click(cx, out, t, g) {
+  const s = cx.createBufferSource(); s.buffer = noiseBuf(cx, 0.05);
+  const hp = cx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+  const gn = cx.createGain();
+  gn.gain.setValueAtTime(g, t);
+  gn.gain.exponentialRampToValueAtTime(0.0006, t + 0.05);
+  s.connect(hp); hp.connect(gn); gn.connect(out); s.start(t);
+}
+function bell(cx, out, f, t, dur, g, parts) {
+  (parts || [[1,1],[2,0.3],[3,0.12]]).forEach(([m, a]) => {
+    const o = cx.createOscillator(), gn = cx.createGain();
+    o.type = 'sine'; o.frequency.value = f * m;
+    gn.gain.setValueAtTime(0, t);
+    gn.gain.linearRampToValueAtTime(g * a, t + 0.006);
+    gn.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+    o.connect(gn); gn.connect(out); o.start(t); o.stop(t + dur + 0.02);
+  });
+}
+function thump(cx, out, t, g) {   // 低音鼓「咚」
+  const o = cx.createOscillator(), gn = cx.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(120, t);
+  o.frequency.exponentialRampToValueAtTime(48, t + 0.28);
+  gn.gain.setValueAtTime(g, t);
+  gn.gain.exponentialRampToValueAtTime(0.0006, t + 0.42);
+  o.connect(gn); gn.connect(out); o.start(t); o.stop(t + 0.45);
+}
+
+// ── 四個候選 ──
+const CAND = [
+  {nm:'紙牌抽出＋翻面', dur:0.45,
+   ds:'「唰──啪」。寫實路線：牌從整疊裡抽出來的摩擦聲，尾巴接一下翻面的脆響。最短、最不搶戲，連抽好幾張也不煩。',
+   build(cx, out, t) { paper(cx, out, t, 0.26, 600, 4200, 0.30); click(cx, out, t + 0.24, 0.34); }},
+
+  {nm:'魔法閃光', dur:1.30,
+   ds:'「叮叮鈴～」。上行三音鈴琴加長尾韻，抽到東西的期待感最強。比較搶戲，適合當「抽卡」這種有懸念的動作。',
+   build(cx, out, t) {
+     bell(cx, out, 783.99, t,        0.55, 0.20);
+     bell(cx, out, 1046.5, t + 0.09, 0.60, 0.20);
+     bell(cx, out, 1567.98, t + 0.18, 1.10, 0.22);
+   }},
+
+  {nm:'洗牌嘩啦', dur:0.68,
+   ds:'「嘩啦啦」。一整疊牌被撥開的連續聲，六下漸弱的紙聲。動作感最足，像真的在牌堆裡挑。',
+   build(cx, out, t) {
+     // 六下短紙聲。單獨看每一下都很短，用 400ms 窗量響度會被稀釋，
+     // 所以音源本身要做得比別的候選大，才不用靠倍率硬拉。
+     for (let i = 0; i < 6; i++) paper(cx, out, t + i * 0.055, 0.13, 900, 3400, 0.62 - i * 0.07);
+   }},
+
+  {nm:'抽出＋懸疑鼓點', dur:0.85,
+   ds:'「唰──咚」。紙聲之後接一下低音鼓，強調「結果還不知道」。翻牌前的停頓感最重，但每回合都聽會有點沉。',
+   build(cx, out, t) { paper(cx, out, t, 0.24, 700, 3800, 0.26); click(cx, out, t + 0.22, 0.22); thump(cx, out, t + 0.26, 0.42); }},
+];
+
+// ── 量測（跟遊戲同一套：400ms 窗 RMS 的 p95），把四個都對齊擲骰子的 -27dB ──
+const TARGET = 0.0446;
+const gain = {};
+async function measureAll() {
+  const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  for (let i = 0; i < CAND.length; i++) {
+    const oc = new OC(1, 44100 * 3, 44100);
+    const bus = oc.createGain(); bus.gain.value = 1; bus.connect(oc.destination);
+    CAND[i].build(oc, bus, 0.02);
+    const buf = await oc.startRendering();
+    const d = buf.getChannelData(0);
+    const win = Math.floor(44100 * 0.4), hop = Math.floor(win / 2), rs = [];
+    for (let s = 0; s + win <= d.length; s += hop) {
+      let e = 0; for (let k = s; k < s + win; k++) e += d[k] * d[k];
+      rs.push(Math.sqrt(e / win));
+    }
+    rs.sort((a, b) => a - b);
+    const p95 = rs[Math.floor(rs.length * 0.95)] || 1e-9;
+    gain[i] = Math.min(4, TARGET / p95);
+    CAND[i].dB = 20 * Math.log10(p95);
+  }
+  render();
+}
+
+// ── BGM 與避讓（引用計數，跟 audio.js 同一套邏輯）──
+let bgmEl = null, base = 0, duckN = 0, timer = null;
+function bgmOn() {
+  if (!bgmEl) { bgmEl = new Audio('assets/audio/spring.mp3?v=2'); bgmEl.loop = true; }
+  bgmEl.volume = base = 0.8;
+  bgmEl.play().then(() => document.getElementById('bs').textContent = '播放中')
+              .catch(e => document.getElementById('bs').textContent = '被瀏覽器擋住：' + e.name);
+}
+function duck(ms) {
+  if (!bgmEl || bgmEl.paused) return;
+  duckN++; clearInterval(timer); bgmEl.volume = base * 0.22;
+  setTimeout(() => {
+    duckN = Math.max(0, duckN - 1);
+    if (duckN > 0) return;
+    const t0 = Date.now();
+    clearInterval(timer);
+    timer = setInterval(() => {
+      const k = Math.min(1, (Date.now() - t0) / 700);
+      bgmEl.volume = base * (0.22 + 0.78 * k);
+      if (k >= 1) clearInterval(timer);
+    }, 40);
+  }, ms);
+}
+
+function play(i) {
+  const cx = c();
+  const bus = cx.createGain();
+  bus.gain.value = 0.7 * (gain[i] == null ? 1 : gain[i]);   // 0.7 = 遊戲的音效總音量
+  bus.connect(cx.destination);
+  CAND[i].build(cx, bus, cx.currentTime + 0.02);
+  duck(Math.round(CAND[i].dur * 1000) + 500);
+}
+
+function render() {
+  document.getElementById('list').innerHTML = CAND.map((x, i) => `
+    <div class="row">
+      <div class="n">${i + 1}</div>
+      <div class="body">
+        <div class="nm">${x.nm}</div>
+        <div class="ds">${x.ds}</div>
+        <div class="mt">長度 ${x.dur.toFixed(2)} 秒　原始響度 ${x.dB == null ? '—' : x.dB.toFixed(1) + ' dB'}　套用倍率 ×${gain[i] == null ? '—' : gain[i].toFixed(2)}</div>
+      </div>
+      <div class="btns">
+        <button class="amber" onclick="play(${i})">▶ 試聽</button>
+        <button onclick="play(${i});setTimeout(()=>play(${i}),700);setTimeout(()=>play(${i}),1400)">▶▶ 連抽三張</button>
+      </div>
+    </div>`).join('');
+}
+
+document.getElementById('bgm').onclick = bgmOn;
+document.getElementById('bgmoff').onclick = () => { if (bgmEl) bgmEl.pause(); document.getElementById('bs').textContent = '已停'; };
+render();
+measureAll();
+</script>
+</body>
+</html>
