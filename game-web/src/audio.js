@@ -26,7 +26,12 @@ const audioURL = key => `assets/audio/${key}.mp3?v=${AUDIO_VER}`;
 const BGM = {
   KEYS: ['splash', 'setup', 'lobby', 'character_select', 'spring', 'summer', 'autumn', 'winter', 'debt', 'sea', 'plane',
          // 行進間配樂：擲完骰開始走才播，依玩家車型挑（見 rules 的 TRAIN_BGM）
-         'train_local', 'train_puyuma', 'train_hsr'],
+         'train_local', 'train_puyuma', 'train_hsr',
+         // 總決算慶祝：目前只是資產（已正規化、註冊好），還沒有任何觸發點會播它——
+         // 總決算動畫這個視覺演出本身還沒接進遊戲，所以先不寫觸發邏輯。真的要接的時候，
+         // 播放要走 Game 那一套「driver／listener 共用同一份推導」的路（像 bgmKeyNow／syncBgm），
+         // 不能在某個畫面直接呼叫 BGM.play('finale')——那正是這次連線版 BGM 分岔問題的成因。
+         'finale'],
   SEASON_KEY: {'春天': 'spring', '夏天': 'summer', '秋天': 'autumn', '冬天': 'winter'},
 
   // ── 音量 ──
