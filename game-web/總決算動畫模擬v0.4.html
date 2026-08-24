@@ -3,23 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>小球貓電鐵｜旅程最終總決算 v0.1</title>
+<title>小球貓電鐵｜旅程最終總決算 v0.4</title>
 <style>
   :root{
     --navy:#081c31;--deep:#0d2e4b;--blue:#167bad;--sky:#73d5f3;--cream:#fff8df;
     --gold:#ffd148;--gold2:#f29a1f;--pink:#ff658d;--mint:#61d3ad;--ink:#14324a;
     --ui:system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
   }
-  *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--navy);font-family:var(--ui);color:#fff}
-  button{font:inherit}.stage{position:fixed;inset:0;overflow:hidden;isolation:isolate;background:linear-gradient(#118bc1 0 55%,#68d1ee 55% 73%,#dff7fb 73%)}
+  *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#020b13;font-family:var(--ui);color:#fff}body{display:grid;place-items:center}
+  button{font:inherit}.stage{position:relative;width:min(100vw,133.3333vh);height:min(100vh,75vw);aspect-ratio:4/3;overflow:hidden;isolation:isolate;background:#8bcce2 url('assets/finale/finale-background-v2.png') center/cover no-repeat;box-shadow:0 0 70px #000b}
   .sun{position:absolute;top:12%;right:8%;width:min(16vw,170px);aspect-ratio:1;border-radius:50%;background:#fff4a8;box-shadow:0 0 0 18px #fff3a82c,0 0 80px #fff1a6;opacity:.85}
   .cloud{position:absolute;width:150px;height:33px;border-radius:99px;background:#fff9;filter:drop-shadow(0 5px 8px #1450701c);animation:cloud 25s linear infinite}.cloud:before,.cloud:after{content:"";position:absolute;border-radius:50%;background:inherit}.cloud:before{width:66px;height:66px;left:26px;bottom:0}.cloud:after{width:86px;height:86px;right:15px;bottom:0}.cloud.c1{top:20%;left:-180px}.cloud.c2{top:8%;left:52%;scale:.62;animation-delay:-14s}@keyframes cloud{to{transform:translateX(calc(100vw + 360px))}}
   .hills{position:absolute;left:-5%;right:-5%;bottom:21%;height:31%;background:#7dbd80;clip-path:polygon(0 56%,8% 35%,17% 60%,29% 16%,40% 62%,50% 35%,61% 59%,73% 12%,86% 56%,100% 30%,100% 100%,0 100%);filter:drop-shadow(0 -7px 0 #d5f09d)}
   .city{position:absolute;left:0;right:0;bottom:20%;height:18%;opacity:.38;background:repeating-linear-gradient(90deg,#2d6c7d 0 35px,transparent 35px 48px);clip-path:polygon(0 55%,4% 55%,4% 20%,8% 20%,8% 60%,13% 60%,13% 5%,18% 5%,18% 50%,23% 50%,23% 28%,29% 28%,29% 65%,35% 65%,35% 15%,40% 15%,40% 54%,46% 54%,46% 32%,52% 32%,52% 62%,58% 62%,58% 10%,64% 10%,64% 55%,70% 55%,70% 22%,77% 22%,77% 60%,83% 60%,83% 4%,89% 4%,89% 54%,94% 54%,94% 27%,100% 27%,100% 100%,0 100%)}
-  .platform{position:absolute;z-index:2;left:0;right:0;bottom:0;height:24%;background:linear-gradient(#eee6cf 0 12%,#5d6970 12% 17%,#a7a199 17% 22%,#404a51 22% 25%,#b9b0a5 25% 100%)}
-  .platform:before{content:"";position:absolute;left:0;right:0;top:40%;height:8px;background:repeating-linear-gradient(90deg,#fff3bc 0 32px,#e6b938 32px 64px)}
-  .track{position:absolute;z-index:3;left:-2%;right:-2%;bottom:3.5%;height:7%;border-top:8px solid #3c454b;border-bottom:8px solid #3c454b;background:repeating-linear-gradient(90deg,transparent 0 28px,#596268 28px 41px,transparent 41px 70px)}
-  .train{position:absolute;z-index:4;left:-32%;bottom:6%;width:min(31vw,430px);filter:drop-shadow(0 10px 5px #152d3f55);animation:trainIn 1.7s cubic-bezier(.2,.7,.25,1) forwards;animation-play-state:paused}.running .train{animation-play-state:running}@keyframes trainIn{to{left:4%}}
+  .platform,.track{display:none}
+  .train{position:absolute;z-index:4;left:-112%;bottom:-11%;width:108%;transform:scaleX(-1);filter:drop-shadow(0 18px 9px #152d3f66);animation:trainLoop 10s linear infinite;animation-play-state:paused;will-change:left}.running .train{animation-play-state:running}@keyframes trainLoop{0%{left:-112%}50%{left:104%}50.01%,100%{left:104%}}
 
   .topbar{position:absolute;z-index:20;inset:0 0 auto;height:70px;padding:0 clamp(18px,4vw,56px);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#082038f4,#123e5be8);border-bottom:3px solid #ffffff48;box-shadow:0 5px 22px #05223b55}
   .brand{font-weight:950;letter-spacing:.14em;font-size:clamp(13px,1.7vw,22px)}.year-chip{padding:.48em 1em;border:2px solid #ffffff73;border-radius:99px;background:#fff1;color:#fff;font-weight:850;font-size:clamp(11px,1.3vw,16px)}
@@ -29,14 +27,19 @@
   .headline p{margin:.5em 0 0;font-weight:850;font-size:clamp(12px,1.45vw,19px)}
 
   .podium-zone{position:absolute;z-index:12;left:50%;bottom:18%;width:min(920px,94vw);height:52%;transform:translateX(-50%);display:flex;align-items:flex-end;justify-content:center;gap:clamp(7px,1.6vw,20px);pointer-events:none}
-  .player{--accent:#fff;position:relative;width:min(25vw,215px);height:var(--h);display:flex;flex-direction:column;justify-content:flex-end;opacity:0;transform:translateY(120px) scale(.78);transition:opacity .65s ease,transform .75s cubic-bezier(.18,.9,.25,1.2);order:var(--order)}
+  .player{--accent:#fff;position:relative;isolation:isolate;width:min(25vw,215px);height:var(--h);display:flex;flex-direction:column;justify-content:flex-end;opacity:0;transform:translateY(120px) scale(.78);transition:opacity .65s ease,transform .75s cubic-bezier(.18,.9,.25,1.2);order:var(--order)}
+  .player:before{content:"";position:absolute;z-index:-1;left:50%;bottom:7%;width:150%;height:110%;transform:translateX(-50%);background:radial-gradient(ellipse at 50% 38%,#fffbdc99 0,#fff3a33d 28%,transparent 67%);opacity:0;transition:opacity .8s .35s}.player.reveal:before{opacity:1}.first:before{width:185%;height:135%;background:radial-gradient(ellipse at 50% 35%,#fffbd8d9 0,#ffd85a61 30%,transparent 69%)}
   .player.reveal{opacity:1;transform:none}.player.first{width:min(29vw,250px)}
-  .avatar-wrap{position:relative;z-index:2;width:72%;aspect-ratio:1;margin:0 auto -12px;border-radius:28% 28% 18% 18%;background:linear-gradient(#fff,#e5f6fb);border:6px solid var(--accent);box-shadow:0 9px 0 #123a55aa,0 18px 28px #0829425e;overflow:hidden;transform-origin:50% 100%}
+  .avatar-wrap{position:relative;z-index:2;width:72%;aspect-ratio:1;margin:0 auto -12px;border-radius:28% 28% 18% 18%;background:linear-gradient(145deg,#fffdf2,#d9edf2);border:6px solid var(--accent);box-shadow:inset 0 0 0 3px #fff9,0 3px 0 #fff,0 9px 0 #123a55aa,0 18px 28px #0829425e;overflow:hidden;transform-origin:50% 100%}
   .first .avatar-wrap{width:84%;border-width:8px}.reveal .avatar-wrap{animation:bounceAvatar .7s .22s both}@keyframes bounceAvatar{0%{transform:scale(.25) rotate(-12deg)}65%{transform:scale(1.1) rotate(4deg)}100%{transform:none}}
   .avatar-wrap img{width:100%;height:100%;object-fit:contain}.crown{position:absolute;z-index:4;top:-39px;left:50%;transform:translateX(-50%) rotate(-7deg);font-size:52px;filter:drop-shadow(0 5px 2px #7f4d0b66);opacity:0}.first.reveal .crown{animation:crownDrop .7s .55s forwards}@keyframes crownDrop{from{opacity:0;transform:translate(-50%,-70px) rotate(18deg)}to{opacity:1;transform:translateX(-50%) rotate(-7deg)}}
-  .nameplate{position:relative;z-index:3;margin:0 7%;padding:9px 5px;border-radius:12px;background:linear-gradient(#fff9e0,#ffd964);border:3px solid #fff;color:#573810;text-align:center;box-shadow:0 5px 0 #bc701b;font-weight:950;font-size:clamp(13px,1.55vw,20px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .amount{display:block;margin-top:2px;color:#0e5576;font-size:.72em}.block{position:relative;margin:0 auto;width:90%;height:calc(var(--h) * .38);min-height:74px;border-radius:13px 13px 0 0;background:linear-gradient(90deg,#1476a4,#27a1c9 50%,#12688f);border:4px solid #e5fbff;border-bottom:0;box-shadow:inset 0 7px 0 #ffffff26,0 12px 20px #08294255;color:#fff;text-align:center;padding-top:16px;font-size:clamp(29px,4vw,55px);font-weight:1000;text-shadow:0 4px 0 #0b5274}
-  .first .block{background:linear-gradient(90deg,#dc8f0d,#ffd94c 50%,#d7830c);color:#fff9da;text-shadow:0 4px 0 #9d5905}.rank-word{display:block;font-size:10px;letter-spacing:.24em;text-shadow:none;opacity:.85}
+  .nameplate{position:relative;z-index:3;margin:0 5%;padding:10px 8px;border-radius:10px;background:linear-gradient(155deg,#fffbe4 0,#e8bd60 48%,#bd7425 100%);border:3px solid #fff7c9;color:#4d2d08;text-align:center;box-shadow:inset 0 2px 0 #fff, inset 0 -3px 5px #8f4f1644,0 5px 0 #8c4d16,0 9px 15px #08294255;font-weight:950;font-size:clamp(13px,1.55vw,20px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nameplate:before,.nameplate:after{content:"";position:absolute;top:50%;width:6px;height:6px;border-radius:50%;background:#6e4215;box-shadow:inset 0 1px 1px #fff8;transform:translateY(-50%)}.nameplate:before{left:7px}.nameplate:after{right:7px}
+  .amount{display:block;margin-top:2px;color:#0e5576;font-size:.72em}.block{position:relative;isolation:isolate;margin:0 auto;width:92%;height:calc(var(--h) * .4);min-height:78px;border-radius:18px 18px 3px 3px;background:radial-gradient(circle at 50% 12%,#65c5e699,transparent 32%),linear-gradient(135deg,#255f83 0,#102f4c 48%,#071e34 100%);border:4px solid #d7b257;border-bottom:7px solid #8b591b;box-shadow:inset 0 0 0 3px #ffffff1f,inset 0 12px 22px #64d1ef1c,0 7px 0 #5a3918,0 15px 26px #08294270;color:#fff;text-align:center;padding-top:19px;font-size:clamp(29px,4vw,55px);font-weight:1000;text-shadow:0 4px 0 #081c30}
+  .block:before{content:"";position:absolute;z-index:2;left:-5%;right:-5%;top:-9px;height:16px;border:2px solid #fff0a8;border-radius:99px;background:linear-gradient(#fff2a4,#bb6e1d 56%,#6f3a0c);box-shadow:0 4px 7px #081c3055,inset 0 2px 0 #fff;pointer-events:none}.block:after{content:"";position:absolute;z-index:-1;inset:19px 12px 12px;border:1px solid #e8d28d99;border-radius:10px;background:linear-gradient(115deg,#ffffff14,transparent 35%,#ffffff12 36%,transparent 66%);box-shadow:inset 0 0 18px #0003;pointer-events:none}
+  .rank-2 .block{background:radial-gradient(circle at 50% 10%,#eafaff99,transparent 34%),linear-gradient(135deg,#7793a1,#31536a 48%,#173246);border-color:#e5edf0;border-bottom-color:#7c919a;box-shadow:inset 0 0 0 3px #fff4,inset 0 12px 22px #d7f4ff26,0 7px 0 #596d75,0 15px 26px #08294270}.rank-2 .block:before{border-color:#fff;background:linear-gradient(#fff,#b8c9d0 58%,#6d838d)}
+  .rank-3 .block{background:radial-gradient(circle at 50% 10%,#ffd4a077,transparent 34%),linear-gradient(135deg,#a95e32,#66341f 48%,#351b15);border-color:#e5a66d;border-bottom-color:#713419;box-shadow:inset 0 0 0 3px #fff2,inset 0 12px 22px #ffd1a31f,0 7px 0 #512719,0 15px 26px #08294270}.rank-3 .block:before{border-color:#ffd8b6;background:linear-gradient(#ffd5a3,#b96537 58%,#68321d)}
+  .first .block{background:radial-gradient(circle at 50% 8%,#fffbd8 0,#ffe07b66 27%,transparent 42%),linear-gradient(135deg,#f4bd30 0,#bd6c10 48%,#713808 100%);border-color:#fff4a8;border-bottom-color:#8f4c09;box-shadow:inset 0 0 0 3px #fff8,inset 0 13px 25px #fff3aa4d,0 7px 0 #743803,0 0 28px #ffe66f99,0 17px 30px #08294270;color:#fffce5;text-shadow:0 4px 0 #7c3d05}.first .block:before{height:19px;top:-11px;border-color:#fffbd8;background:linear-gradient(#fffbd8,#e99a1d 58%,#8a4607);box-shadow:0 4px 7px #6f390a66,0 0 18px #ffe77b,inset 0 2px 0 #fff}.rank-word{position:relative;z-index:1;display:block;font-size:10px;letter-spacing:.24em;text-shadow:none;opacity:.9}
   .lower-ranks{position:absolute;z-index:14;left:clamp(12px,2.5vw,40px);top:27%;width:min(230px,22vw);display:grid;gap:8px}.mini-player{display:grid;grid-template-columns:32px 42px 1fr;align-items:center;gap:8px;padding:6px 8px;border:2px solid #fff8;border-radius:11px;background:#0b3454dc;box-shadow:0 5px 12px #08283b40;opacity:0;transform:translateX(-70px);transition:.55s}.mini-player.reveal{opacity:1;transform:none}.mini-player img{width:42px;height:42px;border-radius:9px;background:#fff;object-fit:contain}.mini-rank{font-size:18px;font-weight:950;color:var(--gold);text-align:center}.mini-name{font-size:12px;font-weight:900;overflow:hidden;text-overflow:ellipsis}.mini-total{display:block;font-size:10px;color:#bfeaff;margin-top:2px}
 
   .tally{position:absolute;z-index:30;left:50%;top:52%;transform:translate(-50%,-50%) scale(.8);width:min(620px,86vw);padding:24px;border:5px solid #fff1af;border-radius:26px;background:#0a3453ee;text-align:center;box-shadow:0 18px 0 #08253dbb,0 28px 50px #061d3299;opacity:0;pointer-events:none;transition:.35s}.tally.show{opacity:1;transform:translate(-50%,-50%) scale(1)}.tally-label{color:#bdeeff;font-weight:900;letter-spacing:.18em}.tally-number{margin:.18em 0;color:var(--gold);font-size:clamp(40px,7vw,82px);font-weight:1000;font-variant-numeric:tabular-nums}.tally-track{height:12px;border-radius:99px;background:#041c2e;overflow:hidden}.tally-fill{width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--pink),var(--gold),var(--mint))}.show .tally-fill{animation:tally 1.7s ease forwards}@keyframes tally{to{width:100%}}.tally-note{margin-top:12px;font-weight:800;font-size:13px}
@@ -56,8 +59,7 @@
 </head>
 <body>
 <main class="stage" id="stage" aria-label="小球貓電鐵最終總決算動畫">
-  <div class="sun"></div><div class="cloud c1"></div><div class="cloud c2"></div><div class="hills"></div><div class="city"></div>
-  <div class="platform"></div><div class="track"></div><img class="train" src="../images/train_tourism.png" alt="觀光列車抵達終點站">
+  <div class="platform"></div><div class="track"></div><img class="train" src="assets/trains/train_local_v2.png" alt="普通車抵達終點站">
   <header class="topbar"><span class="brand">🐾 小球貓電鐵・終點慶典</span><span class="year-chip" id="year-chip">第 5 年・旅程完結</span></header>
   <section class="headline"><span class="eyebrow">FINAL DESTINATION</span><h1>旅程最終<span>總決算</span></h1><p>沿途的歡笑與努力，都在這一刻閃閃發光！</p></section>
   <section class="podium-zone" id="podium" aria-live="polite"></section>
@@ -67,7 +69,7 @@
   <aside class="details" id="details" aria-label="冠軍資產明細"></aside>
   <div class="fireworks" id="fireworks"></div><div class="confetti" id="confetti"></div>
   <div class="actions" id="actions"><button class="btn primary" id="replay">↻ 再看一次</button><button class="btn" id="continue">一起拍張紀念照！</button></div>
-  <button class="skip" id="skip" title="跳到最終結果" aria-label="跳到最終結果">»</button><span class="hint">總決算動畫 v0.1　｜　空白鍵／A：加速揭曉　｜　Enter：確認</span>
+  <button class="skip" id="skip" title="跳到最終結果" aria-label="跳到最終結果">»</button><span class="hint">總決算動畫 v0.4　｜　空白鍵／A：加速揭曉　｜　Enter：確認</span>
   <div class="start" id="start"><div class="ticket"><div class="paw">🐾</div><h2>終點站到了！</h2><p>所有列車即將進站，準備揭曉這趟旅程的最終排名。</p><button class="start-btn" id="start-btn">開始總決算</button><small>按 A、Enter 或空白鍵也可以開始</small></div></div>
   <p class="sr-only" id="announcement" aria-live="assertive"></p>
 </main>
@@ -123,10 +125,16 @@
     later(()=>{tally.classList.add('show');tallyNote.textContent='最後一位——本屆總冠軍究竟是誰？';tallyNumber.textContent='？？？';},base+2350);
     later(()=>{tally.classList.remove('show');reveal(1);},base+3650);later(finish,base+4300);
   }
+  function requestGameFullscreen(){
+    if(document.fullscreenElement||document.webkitFullscreenElement)return;
+    const root=document.documentElement,enter=root.requestFullscreen||root.webkitRequestFullscreen;
+    if(!enter)return;
+    try{const result=enter.call(root);if(result&&typeof result.catch==='function')result.catch(()=>{});}catch(_){/* 不支援時仍正常開始動畫 */}
+  }
   function begin(){if(running)return;start.classList.add('hide');run()}
   function replay(){running=false;stage.classList.remove('running');void stage.offsetWidth;run()}
   function skip(){if(!running){begin();return}timers.forEach(clearTimeout);timers=[];finish()}
-  document.getElementById('start-btn').onclick=begin;document.getElementById('replay').onclick=replay;document.getElementById('skip').onclick=skip;
+  document.getElementById('start-btn').onclick=()=>{requestGameFullscreen();begin()};document.getElementById('replay').onclick=replay;document.getElementById('skip').onclick=skip;
   document.getElementById('continue').onclick=()=>{stage.classList.add('celebrate');announcement.textContent='喀擦！留下大家在終點站最燦爛的紀念照！';const b=document.getElementById('continue');b.textContent='📸 喀擦！最棒的旅程！';b.disabled=true};
   addEventListener('keydown',e=>{if(['Space','Enter'].includes(e.code)||e.key==='a'||e.key==='A'){e.preventDefault();if(!running)begin();else if(!finished)skip();else if(e.code==='Enter')replay();}});
   window.playFinale=(data,totalYears=5)=>{if(Array.isArray(data)&&data.length){ranking=normalize(data);years=Number(totalYears)||5;running=false;start.classList.add('hide');run()}};

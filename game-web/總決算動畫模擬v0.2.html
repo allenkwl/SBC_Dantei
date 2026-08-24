@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>小球貓電鐵｜旅程最終總決算 v0.1</title>
+<title>小球貓電鐵｜旅程最終總決算 v0.2</title>
 <style>
   :root{
     --navy:#081c31;--deep:#0d2e4b;--blue:#167bad;--sky:#73d5f3;--cream:#fff8df;
     --gold:#ffd148;--gold2:#f29a1f;--pink:#ff658d;--mint:#61d3ad;--ink:#14324a;
     --ui:system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
   }
-  *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--navy);font-family:var(--ui);color:#fff}
-  button{font:inherit}.stage{position:fixed;inset:0;overflow:hidden;isolation:isolate;background:linear-gradient(#118bc1 0 55%,#68d1ee 55% 73%,#dff7fb 73%)}
+  *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#020b13;font-family:var(--ui);color:#fff}body{display:grid;place-items:center}
+  button{font:inherit}.stage{position:relative;width:min(100vw,133.3333vh);height:min(100vh,75vw);aspect-ratio:4/3;overflow:hidden;isolation:isolate;background:linear-gradient(#118bc1 0 55%,#68d1ee 55% 73%,#dff7fb 73%);box-shadow:0 0 70px #000b}
   .sun{position:absolute;top:12%;right:8%;width:min(16vw,170px);aspect-ratio:1;border-radius:50%;background:#fff4a8;box-shadow:0 0 0 18px #fff3a82c,0 0 80px #fff1a6;opacity:.85}
   .cloud{position:absolute;width:150px;height:33px;border-radius:99px;background:#fff9;filter:drop-shadow(0 5px 8px #1450701c);animation:cloud 25s linear infinite}.cloud:before,.cloud:after{content:"";position:absolute;border-radius:50%;background:inherit}.cloud:before{width:66px;height:66px;left:26px;bottom:0}.cloud:after{width:86px;height:86px;right:15px;bottom:0}.cloud.c1{top:20%;left:-180px}.cloud.c2{top:8%;left:52%;scale:.62;animation-delay:-14s}@keyframes cloud{to{transform:translateX(calc(100vw + 360px))}}
   .hills{position:absolute;left:-5%;right:-5%;bottom:21%;height:31%;background:#7dbd80;clip-path:polygon(0 56%,8% 35%,17% 60%,29% 16%,40% 62%,50% 35%,61% 59%,73% 12%,86% 56%,100% 30%,100% 100%,0 100%);filter:drop-shadow(0 -7px 0 #d5f09d)}
@@ -19,7 +19,7 @@
   .platform{position:absolute;z-index:2;left:0;right:0;bottom:0;height:24%;background:linear-gradient(#eee6cf 0 12%,#5d6970 12% 17%,#a7a199 17% 22%,#404a51 22% 25%,#b9b0a5 25% 100%)}
   .platform:before{content:"";position:absolute;left:0;right:0;top:40%;height:8px;background:repeating-linear-gradient(90deg,#fff3bc 0 32px,#e6b938 32px 64px)}
   .track{position:absolute;z-index:3;left:-2%;right:-2%;bottom:3.5%;height:7%;border-top:8px solid #3c454b;border-bottom:8px solid #3c454b;background:repeating-linear-gradient(90deg,transparent 0 28px,#596268 28px 41px,transparent 41px 70px)}
-  .train{position:absolute;z-index:4;left:-32%;bottom:6%;width:min(31vw,430px);filter:drop-shadow(0 10px 5px #152d3f55);animation:trainIn 1.7s cubic-bezier(.2,.7,.25,1) forwards;animation-play-state:paused}.running .train{animation-play-state:running}@keyframes trainIn{to{left:4%}}
+  .train{position:absolute;z-index:4;left:-112%;bottom:-22%;width:108%;transform:scaleX(-1);filter:drop-shadow(0 18px 9px #152d3f66);animation:trainLoop 10s linear infinite;animation-play-state:paused;will-change:left}.running .train{animation-play-state:running}@keyframes trainLoop{0%{left:-112%}50%{left:104%}50.01%,100%{left:104%}}
 
   .topbar{position:absolute;z-index:20;inset:0 0 auto;height:70px;padding:0 clamp(18px,4vw,56px);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#082038f4,#123e5be8);border-bottom:3px solid #ffffff48;box-shadow:0 5px 22px #05223b55}
   .brand{font-weight:950;letter-spacing:.14em;font-size:clamp(13px,1.7vw,22px)}.year-chip{padding:.48em 1em;border:2px solid #ffffff73;border-radius:99px;background:#fff1;color:#fff;font-weight:850;font-size:clamp(11px,1.3vw,16px)}
@@ -57,7 +57,7 @@
 <body>
 <main class="stage" id="stage" aria-label="小球貓電鐵最終總決算動畫">
   <div class="sun"></div><div class="cloud c1"></div><div class="cloud c2"></div><div class="hills"></div><div class="city"></div>
-  <div class="platform"></div><div class="track"></div><img class="train" src="../images/train_tourism.png" alt="觀光列車抵達終點站">
+  <div class="platform"></div><div class="track"></div><img class="train" src="assets/trains/train_local_v2.png" alt="普通車抵達終點站">
   <header class="topbar"><span class="brand">🐾 小球貓電鐵・終點慶典</span><span class="year-chip" id="year-chip">第 5 年・旅程完結</span></header>
   <section class="headline"><span class="eyebrow">FINAL DESTINATION</span><h1>旅程最終<span>總決算</span></h1><p>沿途的歡笑與努力，都在這一刻閃閃發光！</p></section>
   <section class="podium-zone" id="podium" aria-live="polite"></section>
@@ -67,7 +67,7 @@
   <aside class="details" id="details" aria-label="冠軍資產明細"></aside>
   <div class="fireworks" id="fireworks"></div><div class="confetti" id="confetti"></div>
   <div class="actions" id="actions"><button class="btn primary" id="replay">↻ 再看一次</button><button class="btn" id="continue">一起拍張紀念照！</button></div>
-  <button class="skip" id="skip" title="跳到最終結果" aria-label="跳到最終結果">»</button><span class="hint">總決算動畫 v0.1　｜　空白鍵／A：加速揭曉　｜　Enter：確認</span>
+  <button class="skip" id="skip" title="跳到最終結果" aria-label="跳到最終結果">»</button><span class="hint">總決算動畫 v0.2　｜　空白鍵／A：加速揭曉　｜　Enter：確認</span>
   <div class="start" id="start"><div class="ticket"><div class="paw">🐾</div><h2>終點站到了！</h2><p>所有列車即將進站，準備揭曉這趟旅程的最終排名。</p><button class="start-btn" id="start-btn">開始總決算</button><small>按 A、Enter 或空白鍵也可以開始</small></div></div>
   <p class="sr-only" id="announcement" aria-live="assertive"></p>
 </main>
@@ -123,10 +123,16 @@
     later(()=>{tally.classList.add('show');tallyNote.textContent='最後一位——本屆總冠軍究竟是誰？';tallyNumber.textContent='？？？';},base+2350);
     later(()=>{tally.classList.remove('show');reveal(1);},base+3650);later(finish,base+4300);
   }
+  function requestGameFullscreen(){
+    if(document.fullscreenElement||document.webkitFullscreenElement)return;
+    const root=document.documentElement,enter=root.requestFullscreen||root.webkitRequestFullscreen;
+    if(!enter)return;
+    try{const result=enter.call(root);if(result&&typeof result.catch==='function')result.catch(()=>{});}catch(_){/* 不支援時仍正常開始動畫 */}
+  }
   function begin(){if(running)return;start.classList.add('hide');run()}
   function replay(){running=false;stage.classList.remove('running');void stage.offsetWidth;run()}
   function skip(){if(!running){begin();return}timers.forEach(clearTimeout);timers=[];finish()}
-  document.getElementById('start-btn').onclick=begin;document.getElementById('replay').onclick=replay;document.getElementById('skip').onclick=skip;
+  document.getElementById('start-btn').onclick=()=>{requestGameFullscreen();begin()};document.getElementById('replay').onclick=replay;document.getElementById('skip').onclick=skip;
   document.getElementById('continue').onclick=()=>{stage.classList.add('celebrate');announcement.textContent='喀擦！留下大家在終點站最燦爛的紀念照！';const b=document.getElementById('continue');b.textContent='📸 喀擦！最棒的旅程！';b.disabled=true};
   addEventListener('keydown',e=>{if(['Space','Enter'].includes(e.code)||e.key==='a'||e.key==='A'){e.preventDefault();if(!running)begin();else if(!finished)skip();else if(e.code==='Enter')replay();}});
   window.playFinale=(data,totalYears=5)=>{if(Array.isArray(data)&&data.length){ranking=normalize(data);years=Number(totalYears)||5;running=false;start.classList.add('hide');run()}};
