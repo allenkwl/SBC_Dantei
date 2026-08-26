@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小球貓電鐵｜捷徑卡片直升機動畫模擬 v1.5</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:"PingFang TC","Microsoft JhengHei",sans-serif;background:#173e5b}#game{width:100%;height:100%;display:block}
+#ground-shadow{position:fixed;z-index:9;width:92px;height:25px;border-radius:50%;background:radial-gradient(ellipse,#0d2c4080 0,#163b5140 46%,transparent 73%);pointer-events:none;opacity:0;transform:translate(-50%,-10%) scale(var(--shadow-scale,.9));filter:blur(2px);transition:opacity .18s}
+#ground-shadow.show{opacity:var(--shadow-opacity,.32)}
+#heli{position:fixed;z-index:10;width:132px;height:132px;pointer-events:none;opacity:0;transform:translate(-50%,-55%) translateY(calc(var(--altitude,0) * -22px)) scale(var(--flight-scale,1)) rotate(var(--pitch,0deg));transition:opacity .18s;will-change:left,top,transform}
+#heli.show{opacity:1}.craft{--main-x:49.146%;--main-y:19.734%;--tail-x:91.385%;--tail-y:53.574%;position:relative;width:100%;height:100%;transform:scaleX(var(--flight-dir,1));filter:drop-shadow(0 8px 5px #102d4266);animation:cruiseBob .54s ease-in-out infinite alternate;animation-play-state:paused}.airborne .craft{animation-play-state:running}@keyframes cruiseBob{to{translate:0 -3px}}
+#heli-body{position:absolute;z-index:1;inset:0;width:100%;height:100%;object-fit:contain}
+.static-main-blades,.static-tail-blades{position:absolute;z-index:0;left:var(--main-x);top:var(--main-y);opacity:var(--blade-opacity,1);transform:translate(-50%,-50%);transition:opacity .06s linear}
+.static-main-blades{width:82%;height:18%}.static-main-blades:before,.static-main-blades:after{content:"";position:absolute;left:0;top:50%;width:100%;height:22%;border:1px solid #555b70;border-radius:999px;background:linear-gradient(#d8d6df,#85869a 58%,#4d5063);box-shadow:inset 0 1px #fff9;transform:translateY(-50%) rotate(-5deg)}.static-main-blades:after{transform:translateY(-50%) rotate(17deg)}
+.static-tail-blades{left:var(--tail-x);top:var(--tail-y);width:17%;height:17%;animation:rotorSweep calc(var(--rotor-speed,.28s)*.72) linear infinite;animation-play-state:paused}.rotors-on .static-tail-blades{animation-play-state:running}.static-tail-blades:before,.static-tail-blades:after{content:"";position:absolute;left:0;top:42%;width:100%;height:20%;border-radius:999px;background:linear-gradient(90deg,#e93e25 0 42%,#ffd43f 48% 52%,#ef4b26 58%);box-shadow:0 0 0 1px #9c351c}.static-tail-blades:after{transform:rotate(90deg)}
+.main-rotor{position:absolute;z-index:3;left:var(--main-x);top:var(--main-y);width:86%;height:9%;border:2px solid #ecf8ff99;border-radius:50%;opacity:0;transform:translate(-50%,-50%);background:radial-gradient(ellipse at center,transparent 0 44%,#dff5ff40 50%,transparent 57%),linear-gradient(transparent 43%,#f7fdff99 49%,#b9e8f466 53%,transparent 59%);box-shadow:inset 0 0 6px #dff5ff99,0 0 7px #dff5ff66;filter:blur(.3px);animation:rotorShimmer .13s ease-in-out infinite alternate}.main-rotor:before{content:"";position:absolute;left:50%;top:50%;width:74%;height:1px;background:linear-gradient(90deg,transparent,#fff9 18% 82%,transparent);transform:translate(-50%,-50%)}
+.tail-rotor{position:absolute;z-index:3;left:var(--tail-x);top:var(--tail-y);width:17%;height:17%;border:2px solid #eaf8ff99;border-radius:50%;opacity:0;transform:translate(-50%,-50%);background:radial-gradient(circle,transparent 0 43%,#dff7ff88 48%,transparent 58%),conic-gradient(transparent 0 16%,#eaf9ff99 20%,transparent 25% 54%,#eaf9ff88 59%,transparent 64%);box-shadow:inset 0 0 5px #dff7ffaa,0 0 5px #132f4688;animation:rotorSweep calc(var(--rotor-speed,.24s)*.72) linear infinite}
+.rotors-on .main-rotor,.rotors-on .tail-rotor{opacity:var(--blur-opacity,1)}@keyframes rotorSweep{to{rotate:360deg}}@keyframes rotorShimmer{to{opacity:calc(var(--blur-opacity,1)*.62);scale:.96 1}}
+#card{position:fixed;z-index:20;left:4%;top:5%;width:min(300px,43vw);padding:17px 19px;border:4px solid #fff4b0;border-radius:21px;background:linear-gradient(145deg,#266b99,#123751);box-shadow:0 9px 0 #0b2b4388;color:#fff;transform:translateY(-135%);opacity:0;transition:.42s}#card.show{transform:none;opacity:1}#card small{color:#ffe481;font-weight:900;letter-spacing:.15em}#card h1{margin:5px 0 2px;font-size:clamp(25px,3vw,39px)}#card p{margin:0;font-weight:800}
+.banner{position:fixed;z-index:20;left:50%;top:8%;transform:translateX(-50%) scale(.7);padding:11px 22px;border:3px solid #fff;border-radius:999px;background:#fffdf3;color:#183b55;box-shadow:0 5px #9acfe0;font-weight:900;white-space:nowrap;opacity:0;transition:.35s}.banner.show{transform:translateX(-50%) scale(1);opacity:1}#arrival{top:19%;font-size:clamp(21px,3vw,37px)}
+#ctl{position:fixed;z-index:30;right:16px;bottom:16px;width:270px;padding:14px;border:2px solid #65afd2;border-radius:16px;background:#102e49ee;color:#e8f8ff;box-shadow:0 10px 26px #081c2e99}#ctl h3{margin:0 0 6px;color:#ffdb64;font-size:15px}#ctl p{margin:0 0 10px;color:#a8cbdc;font-size:12px;line-height:1.45}select,button{width:100%;font:800 14px inherit}select{padding:8px;margin-bottom:8px;border:2px solid #65afd2;border-radius:8px;background:#173e5a;color:#fff}button{padding:10px;border:3px solid #fff4ae;border-radius:10px;background:linear-gradient(#ffdb64,#f2a11e);box-shadow:0 4px #ad6b0a;color:#3c2900;cursor:pointer}button:disabled{cursor:wait;filter:saturate(.55);opacity:.72}button:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px #ad6b0a}
+@media(max-width:700px){#ctl{right:8px;bottom:8px;width:215px}#heli{width:104px;height:104px}#ground-shadow{width:72px}}
+@media(prefers-reduced-motion:reduce){.craft,.main-rotor,.tail-rotor{animation-duration:.8s!important}}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ground-shadow"></div>
+<div id="heli" aria-label="捷徑直升機">
+  <div class="craft">
+    <div class="static-main-blades"></div>
+    <div class="static-tail-blades"></div>
+    <img id="heli-body" src="assets/vehicles/helicopter_rotorless_v1.png" alt="">
+    <div class="main-rotor"></div>
+    <div class="tail-rotor"></div>
+  </div>
+</div>
+<audio id="heli-sfx" loop preload="auto" src="assets/audio/heli.mp3"></audio>
+<section id="card"><small>移動卡片</small><h1>🚁 蘇花捷徑</h1><p>直接前往花蓮</p></section>
+<div id="use" class="banner">探險家使用「蘇花捷徑」！</div>
+<div id="arrival" class="banner">🎉 抵達花蓮！</div>
+<aside id="ctl"><h3>捷徑卡片動畫 v1.5</h3><p>單一機身搭配共軸葉片與殘影，避免切換素材造成重疊。</p><select id="origin"><option value="tr_taipei">台北</option><option value="tr_taichung" selected>台中</option><option value="tr_tainan">台南</option><option value="tr_kaohsiung">高雄</option></select><button id="play">🚁 使用蘇花捷徑</button></aside>
+<script src="map_data.js"></script>
+<script src="src/data.js"></script>
+<script>window.Game={players:[],cur:0,state:'shortcut',month:6,destination:'tr_hualien',curPlayer(){return this.players[0]}};</script>
+<script src="src/render-v1.17.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const heli=$('heli'),craft=heli.querySelector('.craft'),shadow=$('ground-shadow'),heliSfx=$('heli-sfx'),playButton=$('play');
+let pos=null,run=false,startT=0,start=null,target=null,flightDuration=0,runToken=0;
+const timing={spool:520,lift:430,hover:170,land:460};
+const ROTOR_AXES={main:{x:.4914643808,y:.1973403842},tail:{x:.9138502981,y:.5357395228}};
+const clamp01=n=>Math.max(0,Math.min(1,n));
+const smooth=n=>{n=clamp01(n);return n*n*(3-2*n)};
+const easeInOut=n=>n<.5?4*n*n*n:1-Math.pow(-2*n+2,3)/2;
+
+Data.load();
+Render.init($('game'));
+craft.style.setProperty('--main-x',(ROTOR_AXES.main.x*100)+'%');
+craft.style.setProperty('--main-y',(ROTOR_AXES.main.y*100)+'%');
+craft.style.setProperty('--tail-x',(ROTOR_AXES.tail.x*100)+'%');
+craft.style.setProperty('--tail-y',(ROTOR_AXES.tail.y*100)+'%');
+Render.onFrame=()=>{
+  if(!pos)return;
+  const s=Render.worldToCss(pos.x,pos.y);
+  heli.style.left=s.x+'px';heli.style.top=s.y+'px';
+  shadow.style.left=s.x+'px';shadow.style.top=(s.y+38)+'px';
+};
+
+function setAltitude(value){
+  const altitude=clamp01(value);
+  heli.style.setProperty('--altitude',altitude.toFixed(3));
+  heli.style.setProperty('--flight-scale',(1+altitude*.13).toFixed(3));
+  shadow.style.setProperty('--shadow-scale',(.92-altitude*.28).toFixed(3));
+  shadow.style.setProperty('--shadow-opacity',(.34-altitude*.18).toFixed(3));
+}
+
+function setFlightVisual(mode){
+  heli.classList.toggle('rotors-on',mode!=='off');
+  heli.classList.toggle('airborne',mode==='flight');
+  heli.style.setProperty('--rotor-speed',mode==='flight'?'.105s':mode==='landing'?'.18s':'.28s');
+}
+
+function setRotorBlend(blades,blur){
+  heli.style.setProperty('--blade-opacity',clamp01(blades).toFixed(3));
+  heli.style.setProperty('--blur-opacity',clamp01(blur).toFixed(3));
+}
+
+function stopSound(){heliSfx.pause();heliSfx.currentTime=0}
+
+function verifyHelicopterRelease(){
+  const issues=[];
+  if(document.querySelectorAll('#heli-body').length!==1)issues.push('body-count');
+  if(document.querySelector('#heli-blades'))issues.push('legacy-full-sprite-layer');
+  const checks=[['.static-main-blades',ROTOR_AXES.main],['.main-rotor',ROTOR_AXES.main],['.static-tail-blades',ROTOR_AXES.tail],['.tail-rotor',ROTOR_AXES.tail]];
+  for(const [selector,axis] of checks){
+    const el=document.querySelector(selector),style=getComputedStyle(el);
+    const error=Math.hypot(parseFloat(style.left)/craft.clientWidth-axis.x,parseFloat(style.top)/craft.clientHeight-axis.y)*craft.clientWidth;
+    if(error>.25)issues.push(selector+'-axis-'+error.toFixed(3)+'px');
+  }
+  const result={ok:issues.length===0,issues,bodyCount:document.querySelectorAll('#heli-body').length,axes:ROTOR_AXES};
+  if(!result.ok)console.error('Helicopter release verification failed',result);
+  return result;
+}
+window.verifyHelicopterRelease=verifyHelicopterRelease;
+
+function reset(){
+  runToken++;run=false;playButton.disabled=false;
+  start=Data.stations.get($('origin').value);target=Data.stations.get('tr_hualien');
+  pos={x:start.x,y:start.y};Render.snapTo(start.x,start.y);Render.cam.tscale=Render.ZOOM_NEAR;
+  heli.style.setProperty('--flight-dir',target.x>start.x?-1:1);heli.style.setProperty('--pitch','0deg');
+  heli.classList.add('show');shadow.classList.add('show');setAltitude(0);setRotorBlend(1,0);setFlightVisual('off');stopSound();
+  ['card','use','arrival'].forEach(id=>$(id).classList.remove('show'));
+}
+
+function play(){
+  reset();const token=runToken;
+  const dist=Math.hypot(target.x-start.x,target.y-start.y);
+  flightDuration=Math.max(2300,dist/108*1000);
+  $('card').classList.add('show');setTimeout(()=>{if(token===runToken)$('use').classList.add('show')},250);
+  setTimeout(()=>{if(token===runToken)$('card').classList.remove('show')},1900);
+  playButton.disabled=true;run=true;startT=performance.now();setFlightVisual('spool');
+  heliSfx.volume=.18;heliSfx.currentTime=0;heliSfx.play().catch(()=>{});tick(token);
+}
+
+function tick(token){
+  if(!run||token!==runToken)return;
+  const elapsed=performance.now()-startT;
+  const flightStart=timing.spool+timing.lift;
+  const flightEnd=flightStart+flightDuration;
+  const landStart=flightEnd+timing.hover;
+  const total=landStart+timing.land;
+  const dx=target.x-start.x,dy=target.y-start.y,dist=Math.max(1,Math.hypot(dx,dy));
+  const ux=dx/dist,uy=dy/dist,arc=Math.min(62,dist*.105);
+
+  if(elapsed<timing.spool){
+    const p=smooth(elapsed/timing.spool);setAltitude(0);setRotorBlend(1-p,p);heliSfx.volume=.18+.35*p;
+  }else if(elapsed<flightStart){
+    const p=smooth((elapsed-timing.spool)/timing.lift);setAltitude(p);setRotorBlend(0,1);setFlightVisual('flight');heliSfx.volume=.53+.22*p;
+  }else if(elapsed<flightEnd){
+    const raw=(elapsed-flightStart)/flightDuration,p=easeInOut(raw),bow=Math.sin(Math.PI*p)*arc;
+    pos={x:start.x+dx*p-uy*bow,y:start.y+dy*p+ux*bow};setAltitude(1);setRotorBlend(0,1);
+    const pitch=raw<.18?-5*(1-raw/.18):raw>.78?4*((raw-.78)/.22):0;
+    heli.style.setProperty('--pitch',pitch.toFixed(2)+'deg');
+    const cameraGap=Math.sin(Math.PI*p)*34;
+    Render.cam.x=Render.cam.tx=pos.x-ux*cameraGap;Render.cam.y=Render.cam.ty=pos.y-uy*cameraGap;
+  }else if(elapsed<landStart){
+    pos={x:target.x,y:target.y};setAltitude(1);setRotorBlend(0,1);heli.style.setProperty('--pitch','0deg');Render.snapTo(target.x,target.y);
+  }else if(elapsed<total){
+    const p=smooth((elapsed-landStart)/timing.land);pos={x:target.x,y:target.y};setAltitude(1-p);setRotorBlend(p,1-p);setFlightVisual('landing');heliSfx.volume=Math.max(.08,.75*(1-p));
+  }else{
+    run=false;pos={x:target.x,y:target.y};setAltitude(0);setRotorBlend(1,0);heli.style.setProperty('--pitch','0deg');setFlightVisual('off');stopSound();playButton.disabled=false;
+    $('use').classList.remove('show');setTimeout(()=>$('arrival').classList.add('show'),180);return;
+  }
+  requestAnimationFrame(()=>tick(token));
+}
+
+playButton.onclick=play;$('origin').onchange=reset;
+addEventListener('message',event=>{if(event.data==='playShortcutTrailer')play()});
+if(new URLSearchParams(location.search).get('trailer')==='1')$('ctl').style.display='none';
+reset();requestAnimationFrame(verifyHelicopterRelease);
+</script>
+</body>
+</html>

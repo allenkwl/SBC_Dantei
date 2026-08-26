@@ -98,5 +98,10 @@ window.ARRIVAL_SETTINGS = {
     "promptDelay": 3650,
     "nextRevealDelay": 500,
     "departurePromptBuffer": 250
+  },
+  "clock": {
+    "left": 50.4,
+    "top": 16.5,
+    "size": 17
   }
 };
