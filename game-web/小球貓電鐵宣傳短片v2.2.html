@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小球貓電鐵｜宣傳短片 v2.2</title>
+<style>
+:root{color-scheme:dark;--gold:#ffd451;--ink:#10283d;--deep:#050b12;--ui:"PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:var(--ui)}
+body{display:grid;place-items:center}
+/* 固定的是 16:9 邏輯畫布比例，不是像素解析度。任何 viewport 都採 contain，剩餘區域自然留黑。 */
+#film{position:relative;isolation:isolate;overflow:hidden;container-type:size;width:min(100vw,calc(100vh * 16 / 9));height:min(100vh,calc(100vw * 9 / 16));aspect-ratio:16/9;background:#07131d;color:#fff}
+.scene{position:absolute;inset:0;z-index:2;opacity:0;visibility:hidden;overflow:hidden;transition:opacity .36s ease;pointer-events:none}
+.scene.active{opacity:1;visibility:visible}.fill{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.shade{position:absolute;inset:0;background:linear-gradient(90deg,#06131fd9,#06131f22 55%,#06131f99)}
+.vig{position:absolute;inset:0;z-index:8;pointer-events:none;box-shadow:inset 0 -16cqh 14cqh -10cqh #000e,inset 0 0 9cqw #00111e66}
+.copy{position:absolute;z-index:10;left:7cqw;top:14cqh;max-width:58cqw;text-shadow:0 .35cqh .2cqh #123,0 1cqh 2cqh #000b}
+.kicker{color:var(--gold);font-size:1.55cqw;font-weight:900;letter-spacing:.17em;margin-bottom:1.5cqh}.copy h2{font-size:4.6cqw;line-height:1.12;letter-spacing:.04em}.copy p{margin-top:2cqh;font-size:1.75cqw;line-height:1.55;font-weight:750;color:#eef8ff}
+.caption{position:absolute;z-index:12;left:6cqw;right:6cqw;bottom:7cqh;font-weight:900;font-size:3.25cqw;line-height:1.18;text-shadow:0 .35cqh 0 #123,0 1cqh 2cqh #000e;opacity:0;transform:translateY(2cqh)}
+.active .caption{animation:captionIn .55s ease .2s both}.caption b{color:var(--gold)}.caption small{display:block;margin-top:1cqh;color:#ffe9a3;font-size:1.35cqw;letter-spacing:.04em}
+@keyframes captionIn{to{opacity:1;transform:none}}@keyframes rise{from{opacity:0;transform:translateY(4cqh)}to{opacity:1;transform:none}}@keyframes pop{from{opacity:0;transform:scale(.45) rotate(-8deg)}to{opacity:1;transform:none}}
+
+/* 01 開場 */
+.s-title{background:#08141f}.s-title .fill{filter:brightness(.55) saturate(1.05)}.active .title-bg{animation:slowZoom 4s ease-out both}@keyframes slowZoom{from{transform:scale(1.12)}to{transform:scale(1)}}
+.title-lock{position:absolute;z-index:10;inset:0;display:grid;place-content:center;text-align:center;padding:5cqw}.title-lock>*{opacity:0}.active .title-lock>*{animation:rise .65s ease both}.active .title-lock .title-badge{animation-delay:.1s}.active .title-lock h1{animation-delay:.28s}.active .title-lock p{animation-delay:.48s}
+.title-badge{justify-self:center;padding:1cqh 2cqw;border:2px solid #ffe89b;border-radius:99px;background:#153c59dc;color:#ffe89b;font-size:1.3cqw;font-weight:900;letter-spacing:.16em}.title-lock h1{margin-top:2cqh;color:var(--gold);font-size:7.2cqw;letter-spacing:.07em;-webkit-text-stroke:.12cqw #633b04;text-shadow:0 .7cqh 0 #123,0 1.5cqh 3cqh #000d}.title-lock p{margin-top:1.5cqh;font-size:2.2cqw;font-weight:900;letter-spacing:.09em;text-shadow:0 .4cqh 0 #123,0 1cqh 2cqh #000d}
+
+/* 02 角色 */
+.s-chars{background:linear-gradient(150deg,#144d70,#081a2a)}.char-rays{position:absolute;inset:-30%;background:repeating-conic-gradient(from 10deg,#fff0 0 8deg,#65d4ff1e 8deg 16deg);animation:spinSlow 18s linear infinite}@keyframes spinSlow{to{transform:rotate(360deg)}}
+.char-row{position:absolute;z-index:4;left:6cqw;right:6cqw;bottom:10.5cqh;height:68cqh;display:flex;align-items:flex-end;justify-content:center}.char-card{position:relative;width:20cqw;height:60cqh;margin-left:-1cqw;opacity:0;transform:translateY(14cqh) rotate(var(--tilt));filter:drop-shadow(0 1.2cqh 1cqh #0008)}.char-card:first-child{margin-left:0}.char-card img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.char-card span{position:absolute;left:50%;bottom:0;transform:translateX(-50%);padding:.8cqh 1.2cqw;border:2px solid #fff4b0;border-radius:99px;background:#163a55e8;font-weight:900;font-size:1.35cqw;white-space:nowrap}.active .char-card{animation:charEnter .6s cubic-bezier(.2,1.4,.4,1) both}.active .char-card:nth-child(1){animation-delay:.1s}.active .char-card:nth-child(2){animation-delay:.28s}.active .char-card:nth-child(3){animation-delay:.46s}.active .char-card:nth-child(4){animation-delay:.64s}@keyframes charEnter{to{opacity:1;transform:translateY(0) rotate(var(--tilt))}}
+.pick-ring{position:absolute;z-index:6;left:50%;bottom:16.5cqh;width:20cqw;height:20cqw;border:.45cqw solid var(--gold);border-radius:50%;transform:translateX(-50%) scale(.3);opacity:0;box-shadow:0 0 3cqw #fff7a7}.active .pick-ring{animation:pick 1s ease 1.15s both}@keyframes pick{35%,85%{opacity:1;transform:translateX(-50%) scale(1)}to{opacity:0;transform:translateX(-50%) scale(1.35)}}
+
+/* 03 四季 */
+.s-seasons{background:#1b5fa8}.s-seasons .map-host{z-index:0}.map-host{position:absolute;inset:0;overflow:hidden}
+.season-card{position:absolute;z-index:5;right:5cqw;top:8cqh;width:26cqw;height:46cqh;border:3px solid #fff7bf;border-radius:1.6cqw;background:#0b2e49;box-shadow:0 1.5cqh 3cqh #0008;overflow:hidden}
+.season-strip{position:absolute;inset:0}.season{position:absolute;inset:0;opacity:0}.season img{width:100%;height:100%;object-fit:cover;filter:brightness(.78) saturate(1.1)}.active .season{animation:seasonCut 6s linear both}.active .season:nth-child(1){animation-delay:0s}.active .season:nth-child(2){animation-delay:1.5s}.active .season:nth-child(3){animation-delay:3s}.active .season:nth-child(4){animation-delay:4.5s}@keyframes seasonCut{0%{opacity:0;transform:scale(1.05)}8%,88%{opacity:1}100%{opacity:0;transform:scale(1)}}
+.season-card-label{position:absolute;z-index:3;left:50%;bottom:1.4cqh;transform:translateX(-50%);padding:.55cqh .9cqw;border:1px solid #fff4aa;border-radius:99px;background:#0c2944d9;color:#ffe794;font-size:1cqw;font-weight:850;white-space:nowrap}
+
+/* 04 骰子與列車 */
+.s-dice-run{background:#1b5fa8}.s-dice-run .map-host{z-index:0}.map-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;background:#1b5fa8}.map-scrim{position:absolute;z-index:1;inset:0;background:radial-gradient(ellipse at 60% 48%,#07131e22,#07131e9c 82%)}
+#dice-layer{position:absolute;z-index:7;inset:0}.die{position:absolute;width:10.2cqw;aspect-ratio:2948/3201;background:url('../圖片/骰子/骰子六面圖v0.3.png') 0 0/300% 200% no-repeat;filter:drop-shadow(0 2cqh 1.2cqh #0008);opacity:0}.die.face-2{background-position:50% 0}.die.face-4{background-position:0 100%}.die.face-6{background-position:100% 100%}.active .die{animation:dieThrow 1.08s cubic-bezier(.22,.72,.25,1) var(--delay) both}@keyframes dieThrow{0%{opacity:0;transform:translate(-50%,-50%) translate(-38cqw,-32cqh) scale(.18) rotate(-620deg)}68%{opacity:1;transform:translate(-50%,-50%) translate(0,-12cqh) scale(1.18) rotate(25deg)}84%{transform:translate(-50%,-50%) translate(0,1.5cqh) scale(.92) rotate(0)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.dice-total{position:absolute;z-index:8;left:59%;top:18%;transform:translateX(-50%) scale(.5);opacity:0;padding:1.2cqh 2.2cqw;border:3px solid #fff1a9;border-radius:99px;background:#123a58e8;color:var(--gold);font-size:2.2cqw;font-weight:900}.active .dice-total{animation:pop .5s ease 1.15s both}
+
+/* 05 物產與卡片 */
+.s-cards{background:#173954}.s-cards>.fill{filter:brightness(.4) saturate(.8)}.property-row{position:absolute;z-index:4;left:7cqw;top:12cqh;display:flex;gap:1.4cqw}.property{width:9cqw;padding:1.6cqh .8cqw;border:2px solid #7bc7e8;border-radius:1.2cqw;background:#153650e8;text-align:center;box-shadow:0 .8cqh 0 #0a2235}.property img{width:4.8cqw;height:4.8cqw;object-fit:contain}.property b{display:block;margin-top:.8cqh;font-size:1.15cqw}.property small{display:block;color:#ffd86d;font-size:.85cqw;margin-top:.35cqh}
+.card-hand{position:absolute;z-index:6;right:5cqw;top:8cqh;width:43cqw;height:71cqh;perspective:90cqw}.game-card{--card-a:#2b83b4;--card-b:#123b61;position:absolute;left:50%;top:50%;width:15.5cqw;height:34cqh;padding:1.25cqh 1cqw;border:.28cqw solid #fff1a1;border-radius:1.25cqw;background:radial-gradient(circle at 50% 10%,#ffffff4d,transparent 31%),linear-gradient(155deg,var(--card-a),var(--card-b));box-shadow:inset 0 0 0 .13cqw #ffffff55,inset 0 0 2.3cqw #6de7ff29,0 1.5cqh 2.5cqh #000a;text-align:center;transform-origin:50% 110%;opacity:0;overflow:hidden}.game-card:before{content:"";position:absolute;z-index:0;inset:-60% -100%;background:linear-gradient(110deg,transparent 42%,#fff8 49%,transparent 56%);transform:translateX(-55%) rotate(12deg)}.active .game-card:before{animation:foilSweep 1.1s ease calc(var(--delay) + .75s) both}.game-card:after{content:"";position:absolute;inset:.48cqw;border:1px solid #fff6bd99;border-radius:.8cqw;pointer-events:none}.game-card>*{position:relative;z-index:1}.game-card.legendary{--card-a:#7351bd;--card-b:#24205a;border-color:#ffe070;box-shadow:inset 0 0 0 .13cqw #fff9,inset 0 0 3cqw #d586ff55,0 0 2.2cqw #ffd95877,0 1.7cqh 2.8cqh #000b}.game-card.rare{--card-a:#257eaa;--card-b:#123a59}.game-card.epic{--card-a:#9b455d;--card-b:#43233c}.card-rarity{display:flex;justify-content:space-between;align-items:center;color:#fff5ad;font-size:.68cqw;font-weight:950;letter-spacing:.12em}.card-cost{display:grid;place-items:center;padding:0 .7cqw;height:2.2cqw;border-radius:99px;background:linear-gradient(#fff09d,#e49d1e);border:.16cqw solid #fff;color:#513300;font-size:.8cqw;font-weight:950;white-space:nowrap;box-shadow:0 .35cqh #86510d}.card-art{display:grid;place-items:center;width:8cqw;height:8cqw;margin:1.25cqh auto .8cqh;border:.18cqw solid #fff4b7;border-radius:50%;background:radial-gradient(circle,#ffffff88,#8ee7ff2e 58%,#071a3655);font-style:normal;font-size:4.5cqw;filter:drop-shadow(0 .55cqh .5cqh #0007)}.game-card h3{color:#ffe377;font-size:1.45cqw;letter-spacing:.05em;text-shadow:0 .2cqh #4b2700}.card-type{display:inline-block;margin-top:.55cqh;padding:.3cqh .65cqw;border-radius:99px;background:#071d3a99;color:#c9eeff;font-size:.67cqw;font-weight:850}.game-card p{margin:.8cqh auto 0;max-width:12cqw;color:#fff;font-size:.83cqw;line-height:1.45;font-weight:750}.active .game-card{animation:deal .72s cubic-bezier(.2,1.35,.4,1) var(--delay) both,floatCard 2.2s ease-in-out calc(var(--delay) + .75s) infinite alternate}@keyframes deal{from{opacity:0;transform:translate(-50%,-50%) rotate(0) rotateY(75deg) scale(.3)}to{opacity:1;transform:translate(-50%,-50%) rotate(var(--rot)) translateY(var(--lift)) rotateY(0)}}@keyframes floatCard{to{margin-top:-1.1cqh;filter:brightness(1.08)}}@keyframes foilSweep{to{transform:translateX(90%) rotate(12deg)}}
+
+/* 06 交通蒙太奇與新版直升機 */
+.s-transport{background:#163f5f}.transport-shot{position:absolute;inset:0;opacity:0;background:#163f5f}.transport-shot .fill{filter:brightness(.7) saturate(1.05)}.transport-shot .vehicle{position:absolute;z-index:4;filter:drop-shadow(0 2cqh 1.5cqh #000a)}
+.active .shot-train{animation:shot 1.45s linear 0s both}.active .shot-plane{animation:shot 1.45s linear 1.35s both}.active .shot-sea{animation:shot 1.45s linear 2.7s both}.active .shot-heli{animation:shotLast 3.95s linear 4.05s both}@keyframes shot{0%,100%{opacity:0}8%,90%{opacity:1}}@keyframes shotLast{0%{opacity:0}5%,100%{opacity:1}}
+.shot-train .vehicle{width:65cqw;left:-68cqw;bottom:8cqh;transform:scaleX(-1)}.active .shot-train .vehicle{animation:vehicleTrain 1.45s linear both}@keyframes vehicleTrain{from{left:-68cqw;transform:scaleX(-1)}to{left:105cqw;transform:scaleX(-1)}}
+.shot-plane .vehicle{width:22cqw;right:-22cqw;top:22cqh;transform:rotate(-90deg)}.active .shot-plane .vehicle{animation:vehiclePlane 1.45s ease-out 1.35s both}@keyframes vehiclePlane{from{right:-22cqw;top:22cqh;transform:rotate(-90deg)}to{right:108cqw;top:7cqh;transform:rotate(-90deg)}}
+.shot-sea .vehicle{width:26cqw;left:-26cqw;bottom:11cqh;transform:rotate(90deg)}.active .shot-sea .vehicle{animation:vehicleSea 1.45s ease-out 2.7s both}@keyframes vehicleSea{from{left:-26cqw;transform:translateY(0) rotate(90deg)}to{left:108cqw;transform:translateY(-2cqh) rotate(90deg)}}
+.transport-label{position:absolute;z-index:9;left:5cqw;top:7cqh;padding:1cqh 1.4cqw;border:2px solid #fff3ad;border-radius:99px;background:#123b59dc;color:#ffe68a;font-size:1.25cqw;font-weight:900;letter-spacing:.12em}
+#tr-heli{position:absolute;z-index:7;width:14cqw;height:14cqw;left:16cqw;top:53cqh;opacity:0;transform:translate(-50%,-55%) scale(var(--flight-scale,1)) rotate(var(--pitch,0deg));filter:drop-shadow(0 1.2cqh .8cqh #102d42aa)}.active #tr-heli{animation:heliFlight 3.7s cubic-bezier(.42,0,.25,1) 4.15s both}@keyframes heliFlight{0%{opacity:0;left:15cqw;top:58cqh;--flight-scale:.8;--pitch:-5deg}10%{opacity:1}36%{left:40cqw;top:28cqh;--flight-scale:1.12;--pitch:-5deg}78%{left:78cqw;top:35cqh;--flight-scale:1.05;--pitch:2deg}100%{opacity:1;left:85cqw;top:54cqh;--flight-scale:.82;--pitch:0deg}}
+.tr-craft{--main-x:49.146%;--main-y:19.734%;--tail-x:91.385%;--tail-y:53.574%;position:relative;width:100%;height:100%;transform:scaleX(-1)}.tr-body{position:absolute;z-index:1;inset:0;width:100%;height:100%;object-fit:contain}.tr-main,.tr-tail{position:absolute;z-index:3;opacity:0;transform:translate(-50%,-50%)}.tr-main{left:var(--main-x);top:var(--main-y);width:86%;height:9%;border:2px solid #ecf8ff99;border-radius:50%;background:radial-gradient(ellipse,transparent 0 44%,#dff5ff55 50%,transparent 58%),linear-gradient(transparent 43%,#fff9 50%,transparent 59%);animation:rotorShimmer .12s ease-in-out infinite alternate}.tr-tail{left:var(--tail-x);top:var(--tail-y);width:17%;height:17%;border:2px solid #eaf8ff99;border-radius:50%;background:conic-gradient(transparent 0 16%,#fff9 20%,transparent 25% 54%,#fff8 59%,transparent 64%);animation:rotorSweep .08s linear infinite}.tr-static-main,.tr-static-tail{position:absolute;z-index:0;opacity:1;transform:translate(-50%,-50%)}.tr-static-main{left:var(--main-x);top:var(--main-y);width:82%;height:4%;border-radius:99px;background:#8c8e9c;rotate:-5deg}.tr-static-tail{left:var(--tail-x);top:var(--tail-y);width:17%;height:4%;border-radius:99px;background:#ef4b26}.active .tr-static-main,.active .tr-static-tail{animation:staticFade 3.7s linear 4.15s both}.active .tr-main,.active .tr-tail{animation-delay:4.15s}.active .tr-main{animation-name:rotorShimmer,blurIn}.active .tr-tail{animation-name:rotorSweep,blurIn}.active .tr-main,.active .tr-tail{animation-duration:.12s,3.7s;animation-iteration-count:infinite,1;animation-timing-function:ease-in-out,linear;animation-fill-mode:none,both}@keyframes staticFade{0%,8%{opacity:1}20%,82%{opacity:0}100%{opacity:1}}@keyframes blurIn{0%,8%{opacity:0}20%,82%{opacity:1}100%{opacity:0}}@keyframes rotorSweep{to{transform:translate(-50%,-50%) rotate(360deg)}}@keyframes rotorShimmer{to{transform:translate(-50%,-50%) scale(.95,1);opacity:.62}}
+
+/* 07 抵達 */
+.s-arrival{display:grid;place-items:center;background:#050d15}.arrival-stage{position:relative;width:min(100%,150cqh);height:min(100%,66.667cqw);aspect-ratio:3/2;overflow:hidden;background:#b9deee url('../圖片/車站月台-劇場手繪版v0.1.png') center/cover no-repeat}.station-name{position:absolute;z-index:5;top:32%;left:50%;transform:translateX(-50%);padding:1cqh 1.5cqw;border:4px solid #fff;border-radius:.7cqw;background:#2775a7;box-shadow:0 .7cqh #155377;font-size:2.3cqw;font-weight:900;letter-spacing:.12em}.arrival-train{position:absolute;z-index:6;width:150%;left:-162%;bottom:-5%;filter:drop-shadow(0 1cqh .8cqh #0005)}.active .arrival-train{animation:arriveTrain 5.45s cubic-bezier(.2,.7,.25,1) both}@keyframes arriveTrain{0%{left:-162%}50%,69%{left:-26%}100%{left:108%}}
+.kid{position:absolute;z-index:7;bottom:-4%;width:18%;filter:drop-shadow(0 .4cqh .3cqh #19374877);animation:kidJump .75s ease-in-out infinite alternate}.kid.k1{left:-2%}.kid.k2{left:10%;animation-delay:-.25s}.kid.k3{left:70%;animation-delay:-.5s}.kid.k4{left:83%;animation-delay:-.15s}@keyframes kidJump{to{transform:translateY(-2cqh) rotate(1.5deg)}}
+.arrival-copy{position:absolute;z-index:9;right:4%;top:17%;width:40%;text-align:center;text-shadow:0 .35cqh 0 #16415c,0 1cqh 2cqh #16384ecc}.arrival-copy h2{font-size:3.2cqw}.arrival-copy p{margin-top:1cqh;font-size:1.35cqw;font-weight:850}.next-place{position:absolute;z-index:12;left:50%;top:18%;width:48%;transform:translateX(-50%) scale(.7);opacity:0;padding:2.5cqh 2cqw;border:.35cqw solid #fff4b0;border-radius:1.4cqw;background:linear-gradient(145deg,#286b9b,#153c61);text-align:center;box-shadow:0 1.5cqh 3cqh #0008}.next-place small{display:block;color:#ffe16c;font-size:1.1cqw;font-weight:900;letter-spacing:.15em}.next-place b{display:block;margin-top:1cqh;font-size:4cqw}.active .next-place{animation:pop .55s ease 4s both}.confetti{position:absolute;z-index:10;inset:0;overflow:hidden}.confetti i{position:absolute;top:-5%;left:var(--x);width:.6cqw;height:1.5cqh;background:var(--c);animation:confetti 2.5s linear var(--d) infinite}@keyframes confetti{to{transform:translate(var(--dx),110cqh) rotate(640deg)}}
+
+/* 08 新聞與年度結算 */
+.s-news{background:#c7e1d9}.news-half,.annual-half{position:absolute;inset:0;opacity:0}.active .news-half{animation:newsPart 3s linear both}.active .annual-half{animation:annualPart 3.2s linear 2.8s both}@keyframes newsPart{0%,90%{opacity:1}100%{opacity:0}}@keyframes annualPart{0%{opacity:0}10%,100%{opacity:1}}
+.news-half{display:grid;place-items:center;background:radial-gradient(circle,#f7efe0,#ae4a36)}.news-card{position:relative;width:76cqw;height:72cqh;border:.8cqw solid #f8e4b0;border-radius:1.5cqw;overflow:hidden;box-shadow:0 2cqh 5cqh #0009;transform:rotate(-1deg)}.news-card img{width:100%;height:100%;object-fit:cover}.breaking{position:absolute;left:0;right:0;bottom:0;padding:2cqh 2cqw;background:#a51f18e8;font-size:2.4cqw;font-weight:900;letter-spacing:.08em}
+.annual-half{background:#c1dcd3 url('assets/screens/annual_settlement_bg_v0.1.png') center/cover}.annual-top{position:absolute;left:0;right:0;top:0;padding:2cqh 4cqw;background:#174c57e8;color:#fff;font-size:1.5cqw;font-weight:900;display:flex;justify-content:space-between}.annual-board{position:absolute;left:9cqw;top:18cqh;width:62cqw;padding:3cqh 3cqw;border:.3cqw solid #28626b;border-radius:1.5cqw;background:#fff8e9ed;box-shadow:0 1.5cqh 0 #245f65aa}.annual-board h3{color:#174c57;font-size:2.4cqw}.rank{display:grid;grid-template-columns:4cqw 1fr auto;align-items:center;gap:1cqw;margin-top:1.6cqh;padding:1.2cqh 1.2cqw;border-radius:.8cqw;background:#d9eee8;color:#173e47;font-size:1.3cqw;font-weight:850}.rank:first-of-type{background:#ffe6a0}.rank img{width:3.2cqw;height:3.2cqw;border-radius:50%;object-fit:cover}.annual-cat{position:absolute;right:5cqw;bottom:-4cqh;width:27cqw;filter:drop-shadow(0 1cqh 1cqh #0005)}
+
+/* 09 多人 */
+.s-multi{background:#102d46}.s-multi>.fill{filter:brightness(.45)}.multi-title{position:absolute;z-index:4;left:0;right:0;top:8cqh;text-align:center;font-size:3.5cqw;text-shadow:0 .5cqh 1cqh #000}.multi-title b{color:var(--gold)}.players{position:absolute;z-index:4;left:8cqw;right:8cqw;top:25cqh;display:grid;grid-template-columns:repeat(4,1fr);gap:1.6cqw}.player{padding:2cqh 1cqw;border:.25cqw solid #69b8dd;border-radius:1.3cqw;background:#153b58e9;text-align:center;opacity:0}.player img{width:8cqw;height:8cqw;border-radius:50%;object-fit:cover;border:.3cqw solid #fff2ad}.player b{display:block;margin-top:1cqh;font-size:1.35cqw}.player small{display:block;margin-top:.4cqh;color:#8fe4b5;font-size:.9cqw}.active .player{animation:pop .45s ease var(--delay) both}.connection{position:absolute;z-index:3;left:50%;top:56%;width:55cqw;height:.35cqh;background:linear-gradient(90deg,#7ad7ff,#ffe36c,#7ad7ff);transform:translateX(-50%);box-shadow:0 0 2cqw #6cddff}
+
+/* 10 總決算與片尾 */
+.s-finale{background:#020b13}.finale-frame{position:absolute;inset:0;width:100%;height:100%;border:0;background:#020b13;pointer-events:none}.end-lock{position:absolute;z-index:15;inset:0;display:grid;place-content:center;text-align:center;background:#06131ee8;opacity:0}.active .end-lock{animation:endReveal .55s ease 8.15s both}@keyframes endReveal{to{opacity:1}}.end-lock h2{color:var(--gold);font-size:7cqw;letter-spacing:.06em;text-shadow:0 .6cqh 0 #123,0 1.4cqh 2.5cqh #000}.end-lock p{margin-top:2cqh;font-size:2.3cqw;font-weight:900;letter-spacing:.13em}.end-lock small{display:block;margin-top:2.5cqh;color:#ffe6a0;font-size:1.3cqw;font-weight:800}
+
+/* 播放 UI */
+#gate{position:absolute;z-index:100;inset:0;display:grid;place-content:center;text-align:center;background:#06121bed;backdrop-filter:blur(8px)}#gate[hidden]{display:none}#play{padding:2cqh 3cqw;border:.35cqw solid #fff3a6;border-radius:99px;background:linear-gradient(#ffde67,#f2a51f);box-shadow:0 1cqh 0 #9c6208;color:#392600;font:900 2cqw var(--ui);cursor:pointer}#gate p{margin-top:2.5cqh;color:#cbe6f3;font-size:1.15cqw}
+#controls{position:absolute;z-index:90;right:1.2cqw;bottom:1.5cqh;display:flex;gap:.6cqw;opacity:.2;transition:.2s}#film:hover #controls{opacity:1}#controls button{width:3.2cqw;height:3.2cqw;border:1px solid #ffe99b;border-radius:.7cqw;background:#102f48db;color:#fff;font:900 1.25cqw var(--ui);cursor:pointer}#progress{position:absolute;z-index:91;left:0;right:0;bottom:0;height:.55cqh;background:#0008}#progress i{display:block;width:0;height:100%;background:linear-gradient(90deg,#ffbd2f,#fff19b)}
+#timecode{position:absolute;z-index:90;left:1.2cqw;bottom:1.5cqh;padding:.55cqh .7cqw;border-radius:.4cqw;background:#071522aa;color:#d9edf6;font:700 .85cqw ui-monospace,monospace;opacity:.35}
+.paused *{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.scene *{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<main id="film" aria-label="小球貓電鐵宣傳短片 v2.2">
+  <section class="scene s-title active" data-start="0" data-end="4">
+    <img class="fill title-bg" src="assets/screens/title.jpg" alt=""><div class="shade"></div>
+    <div class="title-lock"><div class="title-badge">台灣鐵道 × 歡樂大富翁</div><h1>小球貓電鐵</h1><p>一起把台灣走成自己的故事</p></div><div class="vig"></div>
+  </section>
+
+  <section class="scene s-chars" data-start="4" data-end="8">
+    <div class="char-rays"></div><div class="pick-ring"></div>
+    <div class="char-row">
+      <div class="char-card" style="--tilt:-5deg"><img src="assets/chars/char_jukiu.png" alt=""><span>探險家</span></div>
+      <div class="char-card" style="--tilt:2deg"><img src="assets/chars/char_baixue.png" alt=""><span>旅行家</span></div>
+      <div class="char-card" style="--tilt:-2deg"><img src="assets/chars/char_heichu.png" alt=""><span>賓士</span></div>
+      <div class="char-card" style="--tilt:5deg"><img src="assets/chars/char_lanpo.png" alt=""><span>站長</span></div>
+    </div><p class="caption">選一隻貓，<b>準備出發！</b></p><div class="vig"></div>
+  </section>
+
+  <section class="scene s-seasons" data-start="8" data-end="14">
+    <div id="season-map-host" class="map-host"><canvas id="map-canvas" class="map-canvas" aria-label="正式遊戲地圖・城市巡覽"></canvas></div><div class="shade"></div>
+    <div class="season-card">
+      <div class="season-strip"><div class="season"><img src="assets/screens/months/03.jpg" alt="春"></div><div class="season"><img src="assets/screens/months/07.jpg" alt="夏"></div><div class="season"><img src="assets/screens/months/10.jpg" alt="秋"></div><div class="season"><img src="assets/screens/months/01.jpg" alt="冬"></div></div>
+      <div class="season-card-label" id="city-label">台北</div>
+    </div>
+    <div class="copy"><div class="kicker">環島旅行</div><h2>全台站點，<br>四季都在變化。</h2><p>夜市、山海、農場與離島，每次出發都有新的風景。</p></div><div class="vig"></div>
+  </section>
+
+  <section class="scene s-dice-run" data-start="14" data-end="20">
+    <div id="run-map-host" class="map-host"></div><div class="map-scrim"></div>
+    <div id="dice-layer"><span class="die face-4" style="left:48%;top:53%;--delay:.05s"></span><span class="die face-2" style="left:60%;top:64%;--delay:.13s"></span><span class="die face-6" style="left:71%;top:50%;--delay:.2s"></span></div>
+    <div class="dice-total">🎲 擲出 12 點！</div>
+    <p class="caption">擲骰出發，<b>下一站會是哪裡？</b><small>搭上不同列車，沿著真正的台灣路線前進</small></p><div class="vig"></div>
+  </section>
+
+  <section class="scene s-cards" data-start="20" data-end="26">
+    <img class="fill" src="assets/screens/months/09.jpg" alt=""><div class="shade"></div>
+    <div class="property-row"><div class="property"><img src="assets/icons/夜市.png" alt=""><b>逢甲夜市</b><small>買下物產</small></div><div class="property"><img src="assets/icons/觀光農場.png" alt=""><b>觀光農場</b><small>累積收入</small></div><div class="property"><img src="assets/icons/卡片商店.png" alt=""><b>卡片商店</b><small>改變局勢</small></div></div>
+    <div class="card-hand">
+      <article class="game-card rare" style="--rot:-15deg;--lift:2cqh;--delay:.15s"><div class="card-rarity"><span>移動</span><span class="card-cost">200萬</span></div><i class="card-art">🎲</i><h3>指定骰</h3><span class="card-type">精準移動</span><p>指定這回合的骰子點數，精準踩上目的地。</p></article>
+      <article class="game-card legendary" style="--rot:0deg;--lift:-2cqh;--delay:.38s"><div class="card-rarity"><span>移動</span><span class="card-cost">120萬</span></div><i class="card-art">🚁</i><h3>蘇花捷徑</h3><span class="card-type">特殊移動</span><p>呼叫直升機越過山海，立即前往花蓮。</p></article>
+      <article class="game-card epic" style="--rot:15deg;--lift:2cqh;--delay:.61s"><div class="card-rarity"><span>攻擊</span><span class="card-cost">120萬</span></div><i class="card-art">🌪️</i><h3>颱風假</h3><span class="card-type">天候事件</span><p>強風打亂時刻表，讓指定對手暫停一回合。</p></article>
+    </div>
+    <p class="caption">買下物產，<b>運用卡片改變旅程</b></p><div class="vig"></div>
+  </section>
+
+  <section class="scene s-transport" data-start="26" data-end="34">
+    <div class="transport-shot shot-train"><img class="fill" src="assets/screens/months/05.jpg" alt=""><img class="vehicle" src="../圖片/慶祝到站列車/劇場版雙節v0.1/普悠瑪-雙節.png" alt="劇場版雙節普悠瑪"><div class="transport-label">鐵路</div></div>
+    <div class="transport-shot shot-plane"><img class="fill" src="assets/screens/months/07.jpg" alt=""><img class="vehicle" src="assets/vehicles/飛機.png" alt="飛機"><div class="transport-label">天空</div></div>
+    <div class="transport-shot shot-sea"><img class="fill" src="assets/screens/months/08.jpg" alt=""><img class="vehicle" src="assets/vehicles/遊輪.png" alt="遊輪"><div class="transport-label">海上</div></div>
+    <div class="transport-shot shot-heli"><img class="fill" src="assets/screens/months/06.jpg" alt=""><div class="transport-label">捷徑卡片・蘇花捷徑</div>
+      <div id="tr-heli"><div class="tr-craft"><div class="tr-static-main"></div><div class="tr-static-tail"></div><img class="tr-body" src="assets/vehicles/helicopter_rotorless_v1.png" alt="直升機"><div class="tr-main"></div><div class="tr-tail"></div></div></div>
+    </div>
+    <p class="caption">鐵路、天空與海上，<b>都能前進</b></p><div class="vig"></div>
+  </section>
+
+  <section class="scene s-arrival" data-start="34" data-end="40">
+    <div class="arrival-stage"><div class="station-name">花蓮</div><img class="arrival-train" src="assets/finale/finale-local-train-v1.png" alt="整列區間車進站">
+      <img class="kid k1" src="../圖片/慶祝到站小朋友/劇場版v0.1/小朋友01-黃外套男孩.png" alt=""><img class="kid k2" src="../圖片/慶祝到站小朋友/劇場版v0.1/小朋友02-紅外套女孩.png" alt=""><img class="kid k3" src="../圖片/慶祝到站小朋友/劇場版v0.1/小朋友06-草帽女孩.png" alt=""><img class="kid k4" src="../圖片/慶祝到站小朋友/劇場版v0.1/小朋友07-眼鏡男孩.png" alt="">
+      <div class="arrival-copy"><h2>🎉 抵達目的地！</h2><p>探險家搶先抵達，獲得 68 萬元</p></div><div class="next-place"><small>下一個目的地</small><b>台南</b></div>
+      <div class="confetti"><i style="--x:8%;--dx:6cqw;--d:.1s;--c:#ff6f91"></i><i style="--x:20%;--dx:-4cqw;--d:.8s;--c:#ffd45a"></i><i style="--x:34%;--dx:5cqw;--d:.3s;--c:#72d5b4"></i><i style="--x:50%;--dx:-6cqw;--d:1s;--c:#8d83e8"></i><i style="--x:68%;--dx:4cqw;--d:.5s;--c:#ff9568"></i><i style="--x:84%;--dx:-5cqw;--d:.2s;--c:#ffd45a"></i></div>
+    </div><div class="vig"></div>
+  </section>
+
+  <section class="scene s-news" data-start="40" data-end="46">
+    <div class="news-half"><div class="news-card"><img src="assets/news/經營之神.jpg" alt="新聞快報"><div class="breaking">新聞快報｜探險家獲得「經營之神」稱號！</div></div></div>
+    <div class="annual-half"><div class="annual-top"><span>🐾 小球貓電鐵・年度財經快報</span><span>三月結算 → 四月開始</span></div><div class="annual-board"><h3>年度資產排行榜</h3><div class="rank"><img src="assets/avatars/探險家.png" alt=""><span>探險家</span><b>1 億 2680 萬</b></div><div class="rank"><img src="assets/avatars/旅行家.png" alt=""><span>旅行家</span><b>9850 萬</b></div><div class="rank"><img src="assets/avatars/站長.png" alt=""><span>站長</span><b>8260 萬</b></div></div><img class="annual-cat" src="assets/chars/char_lanpo.png" alt="站長"></div>
+    <p class="caption">每一年，<b>都有新的局勢</b></p><div class="vig"></div>
+  </section>
+
+  <section class="scene s-multi" data-start="46" data-end="50">
+    <img class="fill" src="assets/screens/lobby.jpg" alt=""><div class="shade"></div><h2 class="multi-title">和朋友一起，<b>線上或同機遊玩</b></h2><div class="connection"></div>
+    <div class="players"><div class="player" style="--delay:.1s"><img src="assets/avatars/探險家.png" alt=""><b>小球</b><small>● 已連線</small></div><div class="player" style="--delay:.3s"><img src="assets/avatars/旅行家.png" alt=""><b>白雪</b><small>● 已連線</small></div><div class="player" style="--delay:.5s"><img src="assets/avatars/賓士.png" alt=""><b>黑醋</b><small>● 已準備</small></div><div class="player" style="--delay:.7s"><img src="assets/avatars/站長.png" alt=""><b>藍波</b><small>● 已準備</small></div></div><div class="vig"></div>
+  </section>
+
+  <section class="scene s-finale" data-start="50" data-end="60.2">
+    <iframe id="finale-frame" class="finale-frame" src="總決算動畫模擬v1.2.html" title="正式總決算動畫"></iframe>
+    <div class="end-lock"><h2>小球貓電鐵</h2><p>下一站，等你出發！</p><small>鐵道・卡片・目的地・驚喜</small></div><div class="vig"></div>
+  </section>
+
+  <div id="gate"><div><button id="play" type="button">▶ 播放 60 秒宣傳片</button><p>16:9 等比例顯示・建議開啟聲音</p></div></div>
+  <div id="timecode">00:00.0</div><div id="controls"><button id="again" title="重新播放">↻</button><button id="mute" title="靜音">🔊</button><button id="pause" title="暫停">Ⅱ</button></div><div id="progress"><i></i></div>
+  <audio id="bgm" preload="auto" src="trailer/小球貓電鐵宣傳片v2_60秒_BGM.mp3"></audio>
+</main>
+
+<script src="map_data.js"></script><script src="src/data.js"></script>
+<script>window.Game={players:[],cur:0,state:'awaitRoll',month:6,destination:null,curPlayer(){return this.players[0]}};</script>
+<script src="src/render-v1.30.js"></script>
+<script>
+(()=>{
+  'use strict';
+  const $=s=>document.querySelector(s), film=$('#film'), bgm=$('#bgm'), scenes=[...document.querySelectorAll('.scene')];
+  const END=60.2, progress=$('#progress i'), timecode=$('#timecode'), gate=$('#gate');
+  const PREVIEW_START=Math.max(0,Math.min(END-.01,Number(new URLSearchParams(location.search).get('start'))||0));
+  let active=-1, playing=false, muted=false, raf=0, lastTime=0;
+  const sfxDefs=[
+    {id:'select',at:4.7,src:'assets/audio/character_select.mp3',vol:.28,stop:6.1},
+    {id:'dice',at:14.12,src:'assets/audio/dice.mp3',vol:.72,stop:16.6},
+    {id:'run',at:16.05,src:'assets/audio/train_puyuma.mp3',vol:.30,stop:20},
+    {id:'card',at:21.0,src:'assets/audio/character_select.mp3',vol:.18,stop:22.2},
+    {id:'train',at:26.0,src:'assets/audio/train_puyuma.mp3',vol:.34,stop:27.4},
+    {id:'plane',at:27.35,src:'assets/audio/plane.mp3',vol:.36,stop:28.8},
+    {id:'sea',at:28.7,src:'assets/audio/sea.mp3',vol:.38,stop:30.25},
+    {id:'heli',at:30.15,src:'assets/audio/heli.mp3',vol:.50,stop:34},
+    {id:'arrivalTrain',at:34.0,src:'assets/audio/train_local.mp3',vol:.28,stop:36.6},
+    {id:'cheer',at:34.05,src:'assets/audio/cheer.mp3',vol:.62,stop:38.1},
+    {id:'finalCheer',at:50.08,src:'assets/audio/cheer.mp3',vol:.48,stop:54.1},
+  ];
+  const sfx=sfxDefs.map(def=>({...def,audio:Object.assign(new Audio(def.src),{preload:'auto'})}));
+  sfx.forEach(x=>x.audio.volume=x.vol);
+
+  function stopAllSfx(){sfx.forEach(x=>{x.audio.pause();x.audio.currentTime=0})}
+  function syncSfx(t,previous){
+    for(const cue of sfx){
+      if(playing&&!muted&&previous<cue.at&&t>=cue.at){cue.audio.currentTime=0;cue.audio.volume=cue.vol;cue.audio.play().catch(()=>{})}
+      if(t>=cue.stop||t<cue.at){if(!cue.audio.paused){cue.audio.pause();cue.audio.currentTime=0}}
+    }
+  }
+  let sceneToken=0,runTimer=0,finaleSkipTimer=0,tourTimers=[];
+  const mapCanvas=$('#map-canvas'),seasonMapHost=$('#season-map-host'),runMapHost=$('#run-map-host'),finaleFrame=$('#finale-frame'),cityLabel=$('#city-label');
+  function clearSceneWork(){clearTimeout(runTimer);clearTimeout(finaleSkipTimer);tourTimers.forEach(clearTimeout);tourTimers=[];sceneToken++;}
+  // 畫布「內部解析度」跟它被搬到新宿主之後的「實際顯示尺寸」只要兜不起來，瀏覽器就會
+  // 直接把整張畫布拉伸／壓扁去塞進新的框——這正是「擲骰子後列車行駛那段地圖變形嚴重」
+  // 的成因（見 src/render-v1.30.js 的 init() 同一套注解）。Render.init() 只在啟動當下
+  // fit 過一次，之後把同一張 canvas appendChild 搬到別的宿主（四季地圖／列車跑動）時
+  // 不會自動再 fit，這裡在每次搬動後補一次，兩幀之後再補一次確保 container query 尺寸
+  // 已經算完。
+  function fitMapCanvasToHost(){
+    mapCanvas.width=mapCanvas.clientWidth*devicePixelRatio;
+    mapCanvas.height=mapCanvas.clientHeight*devicePixelRatio;
+  }
+  function refitMapCanvasSoon(){requestAnimationFrame(()=>requestAnimationFrame(fitMapCanvasToHost))}
+  // 四季旅行：原本是把整座台灣島縮進右側一張小卡，站點全部擠在一起看不清楚。改成用
+  // 正式遊戲的巡覽鏡頭（ZOOM_NEAR，跟玩家平常玩的縮放倍率一樣）依序帶到四個站點密集的
+  // 城市，地圖鋪滿整個畫面（用遊戲時的正常大小），春夏秋冬插畫縮成右上角一張明信片卡，
+  // 兩者都看得到，比小地圖活潑。
+  const SEASON_CITIES=[{id:'tr_taipei',name:'台北'},{id:'tr_kaohsiung',name:'高雄'},{id:'tr_taichung',name:'台中'},{id:'tr_tainan',name:'台南'}];
+  function startSeasonTour(token){
+    if(mapCanvas.parentElement!==seasonMapHost)seasonMapHost.appendChild(mapCanvas);
+    Render.anims.length=0;Game.players=[];Game.cur=0;Render.onFrame=null;Render.freeLook=true;
+    refitMapCanvasSoon();
+    const first=Data.stations.get(SEASON_CITIES[0].id);
+    if(first){Render.cam.x=Render.cam.tx=first.x;Render.cam.y=Render.cam.ty=first.y;Render.cam.scale=Render.cam.tscale=Render.ZOOM_NEAR;}
+    if(cityLabel)cityLabel.textContent=SEASON_CITIES[0].name;
+    SEASON_CITIES.forEach((city,i)=>{
+      if(i===0)return;
+      tourTimers.push(setTimeout(()=>{
+        if(token!==sceneToken||active!==2)return;
+        const st=Data.stations.get(city.id);if(!st)return;
+        Render.cam.tx=st.x;Render.cam.ty=st.y;Render.cam.tscale=Render.ZOOM_NEAR;
+        if(cityLabel)cityLabel.textContent=city.name;
+      },i*1500));
+    });
+  }
+  function deterministicRunChain(startId,hops){
+    const chain=[startId],seen=new Set(chain);let current=startId;
+    for(let i=0;i<hops;i++){
+      const links=(Data.adj.get(current)||[]).filter(link=>!seen.has(link.to)&&!['船運航線','飛機航線'].includes(Data.routeNameOf(current,link.to))).sort((a,b)=>String(a.to).localeCompare(String(b.to),'zh-Hant'));
+      if(!links.length)break;current=links[0].to;chain.push(current);seen.add(current);
+    }
+    return chain;
+  }
+  function startGameRun(token){
+    if(mapCanvas.parentElement!==runMapHost)runMapHost.appendChild(mapCanvas);
+    refitMapCanvasSoon();
+    Render.anims.length=0;Game.month=6;Render.onFrame=null;
+    const fallback=[...Data.stations.keys()][0],startId=Data.stations.has('nm_fengjia')?'nm_fengjia':fallback,chain=deterministicRunChain(startId,12),pts=[];
+    for(let i=0;i<chain.length-1;i++){const seg=Data.edgePath(chain[i],chain[i+1]);pts.push(...(i?seg.slice(1):seg))}
+    const first=Data.stations.get(chain[0]),pl={pos:chain[0],ax:first.x,ay:first.y,trail:[{x:first.x,y:first.y}],color:'#F08C00',train:'tzechiang'};
+    Game.players=[pl];Game.cur=0;Render.freeLook=false;Render.snapTo(first.x,first.y);Render.cam.scale=Render.cam.tscale=Render.ZOOM_NEAR;
+    runTimer=setTimeout(()=>{if(token!==sceneToken||active!==3||pts.length<2)return;Render.movePiece(pl,pts,3750,()=>{pl.pos=chain[chain.length-1]})},1850);
+  }
+  function startFinaleDemo(token){
+    const begin=()=>{
+      if(token!==sceneToken)return;const doc=finaleFrame.contentDocument;if(!doc)return;
+      ['bgm','cheer'].forEach(id=>{const a=doc.getElementById(id);if(a){a.muted=true;a.volume=0}});
+      const start=doc.getElementById('start'),startBtn=doc.getElementById('start-btn'),replay=doc.getElementById('replay');
+      if(start&&!start.classList.contains('hide'))startBtn?.click();else replay?.click();
+      finaleSkipTimer=setTimeout(()=>{if(token===sceneToken)doc.getElementById('skip')?.click()},5450);
+    };
+    if(finaleFrame.contentDocument?.readyState==='complete')begin();else finaleFrame.addEventListener('load',begin,{once:true});
+  }
+  function setScene(t,force=false){
+    let index=scenes.findIndex(s=>t>=+s.dataset.start&&t<+s.dataset.end);if(index<0)index=scenes.length-1;
+    if(index===active&&!force)return;
+    clearSceneWork();scenes.forEach((s,i)=>s.classList.toggle('active',i===index));active=index;const token=sceneToken;
+    if(index===2)startSeasonTour(token);else if(index===3)startGameRun(token);else if(index===9)startFinaleDemo(token);
+  }
+  function renderTime(){
+    let t=Math.min(END,bgm.currentTime||0);if(t<lastTime-.25){stopAllSfx();setScene(t,true)}
+    syncSfx(t,lastTime);setScene(t);if(active===2){Game.month=[3,7,10,1][Math.min(3,Math.floor((t-8)/1.5))]}lastTime=t;
+    progress.style.width=(t/END*100)+'%';timecode.textContent=`00:${t.toFixed(1).padStart(4,'0')}`;
+    if(t>=END){finish();return}raf=requestAnimationFrame(renderTime);
+  }
+  function playFrom(t=0){
+    stopAllSfx();bgm.currentTime=t;lastTime=Math.max(0,t-.01);bgm.volume=.56;bgm.muted=muted;film.classList.remove('paused');playing=true;
+    bgm.play().catch(()=>{});cancelAnimationFrame(raf);renderTime();$('#pause').textContent='Ⅱ';
+  }
+  function finish(){playing=false;bgm.pause();stopAllSfx();film.classList.remove('paused');progress.style.width='100%';$('#pause').textContent='▶'}
+  function togglePause(){
+    if(playing){playing=false;bgm.pause();sfx.forEach(x=>x.audio.pause());film.classList.add('paused');cancelAnimationFrame(raf);$('#pause').textContent='▶'}
+    else{film.classList.remove('paused');playing=true;bgm.play().catch(()=>{});for(const cue of sfx){if(!muted&&bgm.currentTime>=cue.at&&bgm.currentTime<cue.stop)cue.audio.play().catch(()=>{})}renderTime();$('#pause').textContent='Ⅱ'}
+  }
+  $('#play').onclick=()=>{gate.hidden=true;document.documentElement.requestFullscreen?.().catch(()=>{});playFrom(PREVIEW_START)};$('#again').onclick=()=>playFrom(PREVIEW_START);$('#pause').onclick=togglePause;
+  $('#mute').onclick=()=>{muted=!muted;bgm.muted=muted;sfx.forEach(x=>x.audio.muted=muted);$('#mute').textContent=muted?'🔇':'🔊'};
+  addEventListener('keydown',e=>{if(!gate.hidden)return;if(e.code==='Space'){e.preventDefault();togglePause()}if(e.key==='ArrowRight'){playFrom(Math.min(END-.01,bgm.currentTime+2))}if(e.key==='ArrowLeft'){playFrom(Math.max(0,bgm.currentTime-2))}});
+  bgm.addEventListener('ended',finish);
+
+  /* 同一張正式棋盤 Canvas 在右側四季地圖框與全畫面列車實況之間移動，避免啟動兩個 Render loop。 */
+  try{Data.load();Render.init(mapCanvas);startSeasonTour(sceneToken)}catch(error){console.error('Map initialization failed',error)}
+
+  function verifyTrailerRelease(){
+    const issues=[],rect=film.getBoundingClientRect(),ratio=rect.width/rect.height;
+    // ratio 在畫面還沒排版完成時會是 0/0＝NaN；NaN>.002 恆為 false，這個檢查以前會被
+    // NaN 唬過去、永遠不回報比例錯誤。改成先檢查 ratio 是不是有限數字。
+    if(!Number.isFinite(ratio)||Math.abs(ratio-16/9)>.002)issues.push(`film-ratio:${ratio}`);
+    if(scenes.length!==10)issues.push(`scene-count:${scenes.length}`);
+    const expected=[[0,4],[4,8],[8,14],[14,20],[20,26],[26,34],[34,40],[40,46],[46,50],[50,60.2]];
+    scenes.forEach((s,i)=>{if(+s.dataset.start!==expected[i][0]||+s.dataset.end!==expected[i][1])issues.push(`scene-${i+1}-timing`) });
+    const craft=$('.tr-craft'),axes={main:[.49146,.19734],tail:[.91385,.53574]};
+    for(const [selector,axis] of [['.tr-main',axes.main],['.tr-tail',axes.tail],['.tr-static-main',axes.main],['.tr-static-tail',axes.tail]]){
+      const el=$(selector),cs=getComputedStyle(el),err=Math.hypot(parseFloat(cs.left)/craft.clientWidth-axis[0],parseFloat(cs.top)/craft.clientHeight-axis[1])*craft.clientWidth;if(err>.35)issues.push(`${selector}-axis:${err.toFixed(2)}px`)
+    }
+    if(document.querySelectorAll('.tr-body').length!==1)issues.push('helicopter-body-count');
+    if(document.querySelectorAll('#map-canvas').length!==1)issues.push('map-canvas-count');
+    if(!finaleFrame)issues.push('finale-frame');
+    for(const cue of sfxDefs){if(!cue.src||cue.at>=cue.stop||cue.stop>END)issues.push(`sfx:${cue.id}`)}
+    const result={ok:issues.length===0,issues,ratio,sceneCount:scenes.length,duration:END,sfxCount:sfxDefs.length};
+    if(!result.ok)console.error('Trailer release verification failed',result);return result;
+  }
+  window.__trailer={play:playFrom,pause:togglePause,seek:t=>playFrom(Math.max(0,Math.min(END-.01,t))),verify:verifyTrailerRelease,get time(){return bgm.currentTime},scenes,sfxDefs};
+  setScene(0,true);requestAnimationFrame(()=>console.info('Trailer verification',verifyTrailerRelease()));
+})();
+</script>
+</body>
+</html>
