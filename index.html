@@ -17,7 +17,7 @@
 // 這一頁刻意不寫死版號（除了下面那個備援），所以就算被瀏覽器快取住也不會過期：
 // 每次載入都去問 latest.json 現在最新是哪一版，而那個請求帶了時間戳，一定是新的。
 (function () {
-  var fallback = 'game-web/%E5%B0%8F%E7%90%83%E8%B2%93%E9%9B%BB%E9%90%B5v2.37.html';
+  var fallback = 'game-web/%E5%B0%8F%E7%90%83%E8%B2%93%E9%9B%BB%E9%90%B5v2.38.html';
   function go(url) { location.replace(url); }
   fetch('latest.json?t=' + Date.now(), {cache: 'no-store'})
     .then(function (r) { return r.json(); })
@@ -25,6 +25,6 @@
     .catch(function () { go(fallback); });   // 抓不到就走備援，至少進得去
 })();
 </script>
-<noscript><a href="game-web/%E5%B0%8F%E7%90%83%E8%B2%93%E9%9B%BB%E9%90%B5v2.37.html">請點這裡進入遊戲</a></noscript>
+<noscript><a href="game-web/%E5%B0%8F%E7%90%83%E8%B2%93%E9%9B%BB%E9%90%B5v2.38.html">請點這裡進入遊戲</a></noscript>
 </body>
 </html>
