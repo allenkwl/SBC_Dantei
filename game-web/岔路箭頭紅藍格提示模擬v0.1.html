@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>岔路箭頭紅藍格提示模擬 v0.1</title>
+<style>
+  :root { --amber:#F0A020; --red:#DC2626; --blue:#2563EB; --blue-hi:#60A5FA; }
+  body { margin:0; background:#0C1A28; color:#D4E6F4; font-family:"PingFang TC","Microsoft JhengHei",sans-serif; padding:20px 16px 40px; }
+  h1 { margin:0 0 6px; font-size:22px; color:var(--amber); }
+  p.note { margin:0 0 18px; color:#9fbbd2; font-size:14px; line-height:1.6; max-width:980px; }
+  .row { display:flex; flex-wrap:wrap; gap:18px; margin-bottom:28px; }
+  .row h2 { width:100%; margin:0; font-size:17px; color:#fff; }
+  .row h2 small { color:#9fbbd2; font-weight:400; margin-left:8px; }
+  .scene { position:relative; width:min(460px, 100%); height:320px; border-radius:12px; overflow:hidden; box-shadow:0 4px 16px rgba(0,0,0,.5); }
+  .scene .cap { position:absolute; left:10px; top:8px; font-size:13px; background:rgba(0,0,0,.45); padding:3px 8px; border-radius:6px; }
+  .sea  { background:#21529A; }
+  .land { background:radial-gradient(circle at 30% 30%, #8fc75a, #5f9e3d 70%); }
+  .lane { position:absolute; background:#1F6A86; }
+  .land .lane { background:#c9b48a; }
+  .lane.v { left:calc(50% - 10px); top:0; bottom:0; width:20px; }
+  .lane.h { left:50%; right:0; top:calc(50% - 10px); height:20px; }
+  .tile { position:absolute; width:22px; height:22px; border-radius:50%; border:2px solid #fff; transform:translate(-50%,-50%); }
+  .tile.red { background:var(--red); } .tile.blue { background:var(--blue); } .tile.yellow { background:#EAB308; }
+  .ship { position:absolute; left:50%; top:50%; width:96px; height:30px; transform:translate(-50%,-50%); border-radius:40% 12px 12px 40%; background:linear-gradient(#f3d6a8,#c98b3c); border:2px solid #fff6e3; }
+
+  /* ── 遊戲裡現有的岔路箭頭（照抄 v2.43） ── */
+  .branch-btn {
+    position:absolute; width:44px; height:44px; border-radius:50%;
+    background:var(--amber); color:#20150a; border:2px solid #fff; cursor:pointer;
+    font-size:20px; display:flex; align-items:center; justify-content:center;
+    transform:rotate(var(--ang)); box-shadow:0 3px 12px rgba(0,0,0,.5);
+    animation:pulse 1s infinite alternate;
+  }
+  @keyframes pulse { from{box-shadow:0 0 0 0 rgba(240,160,32,.7);} to{box-shadow:0 0 0 12px rgba(240,160,32,0);} }
+  .branch-btn.green-btn { background:#22C55E; color:#08290f; animation:pulse-green 1s infinite alternate; }
+  @keyframes pulse-green { from{box-shadow:0 0 0 0 rgba(34,197,94,.7);} to{box-shadow:0 0 0 12px rgba(34,197,94,0);} }
+
+  /* 方案 A：外圈粗細不變（2px），只換顏色 */
+  .a .branch-btn.next-red  { border-color:var(--red); }
+  .a .branch-btn.next-blue { border-color:var(--blue); }
+
+  /* 方案 B：外圈加粗到 5px 換色，再包一圈細白邊，不管在海上或陸地都看得清楚 */
+  .b .branch-btn { width:48px; height:48px; }
+  .b .branch-btn.next-red  { border:5px solid var(--red);     outline:2px solid #fff; }
+  .b .branch-btn.next-blue { border:5px solid var(--blue-hi); outline:2px solid #fff; }
+  .b .branch-btn.next-none { border:3px solid #fff; }
+
+  .legend { display:flex; gap:18px; flex-wrap:wrap; font-size:14px; margin:-6px 0 22px; }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .legend i { width:16px; height:16px; border-radius:50%; display:inline-block; border:2px solid #fff; }
+</style>
+</head>
+<body>
+<h1>岔路箭頭：用外圈顏色提示下一格是紅格還是藍格</h1>
+<p class="note">
+  每顆方向箭頭的外圈，代表「往這個方向走一步會到的那一格」：紅格（扣錢）＝紅圈、藍格（加錢）＝藍圈，其他（黃格、車站）＝白圈。<br>
+  按鈕本身的底色不變：綠色＝最短路徑，橘色＝其他方向。<br>
+  下面每個場景的配置都一樣：往上（綠色）的下一格是<b>藍格</b>、往右的下一格是<b>紅格</b>、往下的下一格是<b>黃格</b>。
+</p>
+<div class="legend">
+  <span><i style="background:var(--red)"></i>下一格是紅格（扣錢）</span>
+  <span><i style="background:var(--blue)"></i>下一格是藍格（加錢）</span>
+  <span><i style="background:#fff"></i>其他（黃格／車站）</span>
+</div>
+
+<div class="row a" id="rowA"><h2>方案 A：外圈 2px，只換顏色<small>改動最小，但海上的藍圈很難看出來</small></h2></div>
+<div class="row b" id="rowB"><h2>方案 B：外圈加粗到 5px、換色，外面再包一圈細白邊<small>建議採用；海上、陸地都很清楚</small></h2></div>
+
+<script>
+// 場景：船在中央，往上（綠、下一格藍）、往右（橘、下一格紅）、往下（橘、下一格黃）
+const ARROWS = [
+  {ang:-Math.PI/2, green:true,  next:'blue', tile:[0.5, 0.10]},
+  {ang:0,          green:false, next:'red',  tile:[0.92, 0.5]},
+  {ang:Math.PI/2,  green:false, next:'none', tile:[0.5, 0.90], tileCls:'yellow'},
+];
+function scene(row, kind, title) {
+  const s = document.createElement('div');
+  s.className = 'scene ' + kind;
+  s.innerHTML = `<div class="lane v"></div><div class="lane h"></div><div class="cap">${title}</div>` +
+    (kind === 'sea' ? '<div class="ship"></div>' : '<div class="ship" style="width:64px;border-radius:10px;background:linear-gradient(#ff8a5b,#c2410c)"></div>');
+  row.appendChild(s);
+  const W = s.clientWidth, H = s.clientHeight;
+  ARROWS.forEach(a => {
+    const t = document.createElement('div');
+    t.className = 'tile ' + (a.tileCls || a.next);
+    t.style.left = (a.tile[0] * 100) + '%'; t.style.top = (a.tile[1] * 100) + '%';
+    s.appendChild(t);
+    const b = document.createElement('button');
+    b.className = 'branch-btn next-' + a.next + (a.green ? ' green-btn' : '');
+    b.innerHTML = '➤';
+    b.style.setProperty('--ang', a.ang + 'rad');
+    const size = row.classList.contains('b') ? 48 : 44;
+    b.style.left = (W / 2 + Math.cos(a.ang) * 64 - size / 2) + 'px';
+    b.style.top  = (H / 2 + Math.sin(a.ang) * 64 - size / 2) + 'px';
+    s.appendChild(b);
+  });
+}
+for (const id of ['rowA', 'rowB']) {
+  const row = document.getElementById(id);
+  scene(row, 'sea', '海上航線');
+  scene(row, 'land', '陸地鐵路');
+}
+</script>
+</body>
+</html>
